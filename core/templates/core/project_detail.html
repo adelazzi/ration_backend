@@ -1,0 +1,77 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ project.name }} · Ration{% endblock %}
+
+{% block content %}
+<a href="{% url 'home' %}" class="muted">← New project</a>
+<h1 style="margin-top: 10px;">{{ project.name }}</h1>
+<p class="muted">
+  <span class="tag">{{ project.get_status_display }}</span>
+  {% if project.description %} · {{ project.description }}{% endif %}
+</p>
+
+{% for item in blocks %}
+<section class="panel">
+  <h2>
+    {{ item.block.quantity }} {{ item.block.get_block_type_display|lower }} blocks ({{ item.block.block_type }})
+    {% if item.block.required_strength_mpa %}<span class="muted">· min {{ item.block.required_strength_mpa }} MPa</span>{% endif %}
+  </h2>
+
+  {% if not item.options %}
+    <p class="muted">No active mix ratios for {{ item.block.get_block_type_display|lower }} blocks yet.
+      <a href="{% url 'mix_new' %}">Create one</a>.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Mix ratio</th><th class="num">Strength</th><th class="num">Batches</th><th class="num">Blocks made</th><th class="num">Cost / block</th><th class="num">Total cost</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for option in item.options %}
+        <tr>
+          <td><a href="{% url 'mix_edit' option.mix.pk %}">{{ option.mix.name }}</a></td>
+          <td class="num">{% if option.mix.strength_mpa %}{{ option.mix.strength_mpa }} MPa{% else %}—{% endif %}</td>
+          <td class="num">{{ option.batches }}</td>
+          <td class="num">{{ option.blocks_produced }}</td>
+          <td class="num">{% if option.cost_per_block is not None %}{{ option.cost_per_block|floatformat:"2g" }}{% else %}—{% endif %}</td>
+          <td class="num">
+            {% if option.total is not None %}<strong>{{ option.total|floatformat:"2g" }} {{ option.lines.0.currency }}</strong>
+            {% elif not option.lines %}<span class="muted">No ingredients</span>
+            {% else %}<span class="muted">Missing price: {{ option.missing_prices|join:", " }}</span>{% endif %}
+          </td>
+          <td>
+            {% if option.cheapest %}<span class="tag tag-best">Cheapest</span>{% endif %}
+            {% if option.below_strength %}<span class="tag tag-declined">Below required strength</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% for option in item.options %}
+  <details style="margin-top: 14px;">
+    <summary class="muted" style="cursor: pointer;">{{ option.mix.name }} — material breakdown</summary>
+    <div class="table-wrap" style="margin-top: 8px;">
+      <table>
+        <thead><tr><th>Material</th><th class="num">Quantity</th><th class="num">Unit price</th><th class="num">Subtotal</th></tr></thead>
+        <tbody>
+          {% for line in option.lines %}
+          <tr>
+            <td>{{ line.material.name }}</td>
+            <td class="num">{{ line.quantity|floatformat:"3g" }} {{ line.unit }}</td>
+            <td class="num">{% if line.unit_price is not None %}{{ line.unit_price }} {{ line.currency }}/{{ line.unit }}{% else %}<span class="muted">No approved price</span>{% endif %}</td>
+            <td class="num">{% if line.subtotal is not None %}{{ line.subtotal|floatformat:"2g" }}{% else %}—{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="muted">This mix has no ingredients.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endfor %}
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

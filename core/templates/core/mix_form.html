@@ -1,0 +1,57 @@
+{% extends "core/base.html" %}
+
+{% block title %}{% if mix.pk %}{{ mix.name }}{% else %}New mix{% endif %} · Ration{% endblock %}
+
+{% block content %}
+<a href="{% url 'config' %}" class="muted">← Mix configuration</a>
+<h1 style="margin-top: 10px;">{% if mix.pk %}Edit {{ mix.name }}{% else %}New mix ratio{% endif %}</h1>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  <section class="panel">
+    {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+    <div class="grid">
+      {% include "core/_field.html" with field=form.name %}
+      {% include "core/_field.html" with field=form.block_type %}
+      {% include "core/_field.html" with field=form.strength_mpa %}
+      {% include "core/_field.html" with field=form.blocks_per_batch %}
+    </div>
+    {% include "core/_field.html" with field=form.is_active %}
+  </section>
+
+  <section class="panel">
+    <h2>Ingredients per batch</h2>
+    <p class="muted" style="margin-top: 0;">Quantities are in each material's unit, e.g. 3 wheelbarrows of sand + 1 bag of cement.</p>
+    {{ formset.management_form }}
+    {% for error in formset.non_form_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Material</th><th>Quantity per batch</th><th>Remove</th></tr></thead>
+        <tbody>
+          {% for ingredient_form in formset %}
+          <tr>
+            <td>
+              {% for hidden in ingredient_form.hidden_fields %}{{ hidden }}{% endfor %}
+              {{ ingredient_form.material }}
+              {% for error in ingredient_form.material.errors %}<div class="error">{{ error }}</div>{% endfor %}
+              {% for error in ingredient_form.non_field_errors %}<div class="error">{{ error }}</div>{% endfor %}
+            </td>
+            <td>
+              {{ ingredient_form.quantity }}
+              {% for error in ingredient_form.quantity.errors %}<div class="error">{{ error }}</div>{% endfor %}
+            </td>
+            <td>{% if ingredient_form.instance.pk %}{{ ingredient_form.DELETE }}{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Need more rows? Save, and 3 empty rows will appear again.</p>
+  </section>
+
+  <div style="margin-top: 20px;">
+    <button type="submit" class="btn">Save mix</button>
+    <a href="{% url 'config' %}" class="btn btn-ghost">Cancel</a>
+  </div>
+</form>
+{% endblock %}
