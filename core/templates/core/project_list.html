@@ -1,0 +1,78 @@
+{% extends "core/base.html" %}
+
+{% block title %}Projects · Ration{% endblock %}
+
+{% block content %}
+<div class="page-head list-head">
+  <div>
+    <h1 class="display">Projects</h1>
+    <p class="lede">
+      {% if user.sees_only_approved_projects %}Approved projects and their material costs.
+      {% else %}Every project and what its blocks will cost to make.{% endif %}
+    </p>
+  </div>
+  {% if user.is_manager %}<a href="{% url 'project_new' %}" class="btn">New project</a>{% endif %}
+</div>
+
+{% if pending_prices %}
+<div class="notice notice-warning" role="status">
+  {{ pending_prices }} material price{{ pending_prices|pluralize }} waiting for your review.
+  <a href="{% url 'config' %}#price-history">Review prices</a>
+</div>
+{% endif %}
+
+{% if total %}
+<form method="get" class="filters" role="search">
+  <div class="filter-tabs" aria-label="Filter by status">
+    <a href="?{% if query %}q={{ query|urlencode }}{% endif %}" {% if not status %}aria-current="true"{% endif %}>All <span>{{ total }}</span></a>
+    {% for item in statuses %}
+    <a href="?status={{ item.value }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}" {% if status == item.value %}aria-current="true"{% endif %}>{{ item.label }} <span>{{ item.count }}</span></a>
+    {% endfor %}
+  </div>
+  <div class="search">
+    <label for="q" class="visually-hidden">Search projects</label>
+    {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+    <input type="search" id="q" name="q" value="{{ query }}" placeholder="Search by name or notes">
+    <button type="submit" class="btn btn-quiet btn-small">Search</button>
+  </div>
+</form>
+{% endif %}
+
+{% if projects %}
+<div class="table-wrap">
+  <table class="table project-table">
+    <thead>
+      <tr>
+        <th scope="col">Project</th>
+        <th scope="col">Blocks</th>
+        <th scope="col">Status</th>
+        <th scope="col">Created by</th>
+        <th scope="col" class="num">Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for project in projects %}
+      <tr>
+        <td>
+          <a href="{% url 'project_detail' project.pk %}" class="project-link">{{ project.name }}</a>
+          {% if project.description %}<div class="small muted clamp">{{ project.description }}</div>{% endif %}
+        </td>
+        <td class="muted">{% for block in project.blocks.all %}{{ block.quantity }} {{ block.get_block_type_display|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td><span class="status status-{{ project.status }}">{{ project.get_status_display }}</span></td>
+        <td class="muted">{{ project.created_by }}</td>
+        <td class="num muted">{{ project.created_at|date:"j M Y" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif query or status %}
+<p class="empty">No projects match these filters. <a href="{% url 'project_list' %}">Show all projects</a>.</p>
+{% elif user.is_manager %}
+<p class="empty">No projects yet. <a href="{% url 'project_new' %}">Create the first one</a> to compare mix costs.</p>
+{% elif user.sees_only_approved_projects %}
+<p class="empty">No approved projects yet. They'll be listed here once a manager approves them.</p>
+{% else %}
+<p class="empty">No projects yet. A manager creates them.</p>
+{% endif %}
+{% endblock %}

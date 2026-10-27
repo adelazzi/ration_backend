@@ -1,76 +1,262 @@
 {% extends "core/base.html" %}
+{% load ration %}
 
 {% block title %}{{ project.name }} · Ration{% endblock %}
 
 {% block content %}
-<a href="{% url 'home' %}" class="muted">← New project</a>
-<h1 style="margin-top: 10px;">{{ project.name }}</h1>
-<p class="muted">
-  <span class="tag">{{ project.get_status_display }}</span>
-  {% if project.description %} · {{ project.description }}{% endif %}
-</p>
+<a href="{% url 'project_list' %}" class="back">Back to projects</a>
 
-{% for item in blocks %}
-<section class="panel">
-  <h2>
-    {{ item.block.quantity }} {{ item.block.get_block_type_display|lower }} blocks ({{ item.block.block_type }})
-    {% if item.block.required_strength_mpa %}<span class="muted">· min {{ item.block.required_strength_mpa }} MPa</span>{% endif %}
-  </h2>
+<div class="page-head list-head">
+  <div>
+    <h1 class="display">{{ project.name }}</h1>
+    <p class="lede">
+      <span class="status status-{{ project.status }}">{{ project.get_status_display }}</span>
+      <span class="muted small created-by">Created by {{ project.created_by }} on {{ project.created_at|date:"j M Y" }}</span>
+      {% if project.description %}<br>{{ project.description }}{% endif %}
+    </p>
+  </div>
+  {% if user.is_manager %}<a href="{% url 'project_edit' project.pk %}" class="btn btn-quiet">Edit project</a>{% endif %}
+</div>
 
-  {% if not item.options %}
-    <p class="muted">No active mix ratios for {{ item.block.get_block_type_display|lower }} blocks yet.
-      <a href="{% url 'mix_new' %}">Create one</a>.</p>
+{# ---------- Project total ---------- #}
+<section class="project-total" aria-labelledby="project-total">
+  <h2 id="project-total" class="visually-hidden">Project total</h2>
+  {% if estimate.total is not None %}
+  <p class="total-figure">
+    <span class="total-label">Materials for the whole project</span>
+    <span class="total-value">{{ estimate.total|money:estimate.currency }}</span>
+    <span class="total-meta">{{ estimate.blocks }} blocks, {{ estimate.cost_per_block|money:estimate.currency }} a block on average</span>
+  </p>
+  {% elif estimate.unchosen %}
+  <div class="notice notice-warning" role="status">
+    {% if user.is_manager %}Choose a mix for {% for block in estimate.unchosen %}the {{ block.quantity }} {{ block.get_block_type_display|lower }} blocks{% if not forloop.last %} and {% endif %}{% endfor %} to see the project total. Each mix below shows its price.
+    {% else %}The project total appears once a manager chooses a mix for every block type.{% endif %}
+  </div>
+  {% elif estimate.mixed_currencies %}
+  <div class="notice notice-warning" role="status">The selected mixes are priced in different currencies, so they can't be added up. Use one currency for this project's prices.</div>
   {% else %}
-  <div class="table-wrap">
-    <table>
+  <div class="notice notice-warning" role="status">
+    The project total isn't ready: {% if not blocks %}there are no blocks yet{% else %}some block lines have no fully priced mix{% endif %}.
+    {% if blocks %}Approved prices are needed for every material in the selected mixes.{% endif %}
+  </div>
+  {% endif %}
+
+  {% if blocks %}
+  <ul class="total-lines">
+    {% for item in blocks %}
+    <li>
+      <span class="total-line-what">{{ item.block.quantity }} {{ item.block.get_block_type_display|lower }} blocks</span>
+      <span class="total-line-mix">
+        {% if item.selected %}{{ item.selected.mix.name }}
+        {% elif user.is_manager %}<a href="#block-{{ item.block.pk }}">Choose a mix</a>
+        {% else %}<span class="muted">No mix chosen yet</span>{% endif %}
+      </span>
+      <span class="total-line-cost">{% if item.selected.total is not None %}{{ item.selected.total|money:item.selected.currency }}{% else %}<span class="muted">—</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+{# ---------- Material prices for this project ---------- #}
+<section class="section" aria-labelledby="project-prices-title" id="project-prices">
+  <div class="section-head">
+    <div>
+      <h2 id="project-prices-title">Material prices for this project</h2>
+      <p class="muted small">A price set here replaces the default price on this project only, once an accountant approves it.</p>
+    </div>
+  </div>
+
+  <div class="{% if user.is_manager %}split{% endif %}">
+    <div>
+      {% if material_rows %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th scope="col">Material</th><th scope="col" class="num">Price used</th><th scope="col">Source</th></tr></thead>
+          <tbody>
+            {% for row in material_rows %}
+            <tr>
+              <td><span class="swatch tone-{{ row.material|material_tone }}"></span>{{ row.material.name }}</td>
+              <td class="num">
+                {% if row.price %}{{ row.unit_price|money:row.price.currency }} <span class="muted small">per {{ row.material.base_unit }}</span>
+                {% else %}<span class="status status-pending">No approved price</span>{% endif %}
+              </td>
+              <td>
+                {% if row.price.project_id %}<span class="source source-project">This project</span>
+                {% elif row.price %}<span class="source">Default</span>
+                {% else %}<span class="muted">—</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty">No mixes apply to this project's blocks yet, so no materials are needed.</p>
+      {% endif %}
+    </div>
+
+    {% if user.is_manager %}
+    <form method="post" action="{% url 'project_price_add' project.pk %}" class="subform" novalidate>
+      {% csrf_token %}
+      <h3>Set a price for this project</h3>
+      {% include "core/_field.html" with field=price_form.material %}
+      <div class="form-grid">
+        {% include "core/_field.html" with field=price_form.price %}
+        {% include "core/_field.html" with field=price_form.currency %}
+      </div>
+      {% include "core/_field.html" with field=price_form.price_unit %}
+      <div class="field"><button type="submit" class="btn btn-small" data-busy-label="Sending…">Send for approval</button></div>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if project_prices %}
+  <h3 class="subhead">Price requests for this project</h3>
+  <div class="table-wrap allow-popover">
+    <table class="table price-table">
       <thead>
-        <tr><th>Mix ratio</th><th class="num">Strength</th><th class="num">Batches</th><th class="num">Blocks made</th><th class="num">Cost / block</th><th class="num">Total cost</th><th></th></tr>
+        <tr>
+          <th scope="col">Material</th>
+          <th scope="col" class="num">Price</th>
+          <th scope="col">Status</th>
+          <th scope="col">Entered by</th>
+          <th scope="col">Reviewed by</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
       </thead>
       <tbody>
-        {% for option in item.options %}
-        <tr>
-          <td><a href="{% url 'mix_edit' option.mix.pk %}">{{ option.mix.name }}</a></td>
-          <td class="num">{% if option.mix.strength_mpa %}{{ option.mix.strength_mpa }} MPa{% else %}—{% endif %}</td>
-          <td class="num">{{ option.batches }}</td>
-          <td class="num">{{ option.blocks_produced }}</td>
-          <td class="num">{% if option.cost_per_block is not None %}{{ option.cost_per_block|floatformat:"2g" }}{% else %}—{% endif %}</td>
-          <td class="num">
-            {% if option.total is not None %}<strong>{{ option.total|floatformat:"2g" }} {{ option.lines.0.currency }}</strong>
-            {% elif not option.lines %}<span class="muted">No ingredients</span>
-            {% else %}<span class="muted">Missing price: {{ option.missing_prices|join:", " }}</span>{% endif %}
-          </td>
-          <td>
-            {% if option.cheapest %}<span class="tag tag-best">Cheapest</span>{% endif %}
-            {% if option.below_strength %}<span class="tag tag-declined">Below required strength</span>{% endif %}
-          </td>
+        {% for price in project_prices %}
+        <tr{% if price.status == 'pending' %} class="is-pending"{% endif %}>
+          <td><span class="swatch tone-{{ price.material|material_tone }}"></span>{{ price.material.name }}</td>
+          <td class="num">{{ price.price|money:price.currency }} <span class="muted small">per {{ price.unit|unit_label }}</span></td>
+          <td><span class="status status-{{ price.status }}">{{ price.get_status_display }}</span></td>
+          <td class="muted">{{ price.created_by }}<div class="small">{{ price.created_at|date:"j M Y" }}</div></td>
+          <td class="muted">{% if price.reviewed_by %}{{ price.reviewed_by }}<div class="small">{{ price.reviewed_at|date:"j M Y" }}</div>{% else %}—{% endif %}</td>
+          <td>{% url 'project_detail' project.pk as here %}{% include "core/_price_actions.html" with next=here|add:"#project-prices" %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% endif %}
+</section>
 
-  {% for option in item.options %}
-  <details style="margin-top: 14px;">
-    <summary class="muted" style="cursor: pointer;">{{ option.mix.name }} — material breakdown</summary>
-    <div class="table-wrap" style="margin-top: 8px;">
-      <table>
-        <thead><tr><th>Material</th><th class="num">Quantity</th><th class="num">Unit price</th><th class="num">Subtotal</th></tr></thead>
-        <tbody>
-          {% for line in option.lines %}
-          <tr>
-            <td>{{ line.material.name }}</td>
-            <td class="num">{{ line.quantity|floatformat:"3g" }} {{ line.unit }}</td>
-            <td class="num">{% if line.unit_price is not None %}{{ line.unit_price }} {{ line.currency }}/{{ line.unit }}{% else %}<span class="muted">No approved price</span>{% endif %}</td>
-            <td class="num">{% if line.subtotal is not None %}{{ line.subtotal|floatformat:"2g" }}{% else %}—{% endif %}</td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="4" class="muted">This mix has no ingredients.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+{# ---------- Mix comparison per block line ---------- #}
+{% for item in blocks %}
+<section class="section" aria-labelledby="block-{{ item.block.pk }}">
+  <div class="section-head">
+    <div>
+      <h2 id="block-{{ item.block.pk }}">{{ item.block.quantity }} {{ item.block.get_block_type_display|lower }} blocks</h2>
+      {% if item.block.required_strength_mpa %}<p class="muted small">At least {{ item.block.required_strength_mpa|floatformat:"-2" }} MPa</p>{% endif %}
     </div>
-  </details>
-  {% endfor %}
+  </div>
+
+  {% if item.selected %}
+  <p class="answer">
+    This project uses {{ item.selected.mix.name }}{% if item.selected.total is not None %}:
+    <strong>{{ item.selected.total|money:item.selected.currency }}</strong>, or {{ item.selected.cost_per_block|money:item.selected.currency }} a block{% else %}, but it can't be priced yet{% endif %}.
+    {% if item.best and item.best != item.selected %}<br><span class="answer-note">{{ item.best.mix.name }} would be cheapest at {{ item.best.total|money:item.best.currency }}.</span>{% endif %}
+  </p>
+  {% elif item.options %}
+  <p class="answer">
+    {% if user.is_manager %}Choose a mix for these blocks.{% else %}No mix chosen yet.{% endif %}
+    {% if item.best %}<br><span class="answer-note">Cheapest: {{ item.best.mix.name }} at {{ item.best.total|money:item.best.currency }}.</span>{% endif %}
+  </p>
+  {% endif %}
+  {% if item.options and not item.any_priced %}
+  <div class="notice notice-warning" role="status" style="margin-top: 20px;">
+    No mix can be fully priced yet. The missing materials need approved prices, either for this project or as defaults.
+  </div>
+  {% endif %}
+
+  {% if not item.options %}
+  <p class="empty">No active mix ratios cover {{ item.block.get_block_type_display|lower }} blocks.{% if user.is_manager %} <a href="{% url 'mix_new' %}">Add a mix ratio</a>.{% endif %}</p>
+  {% else %}
+  <ol class="compare grow" style="margin-top: 28px;" aria-label="Mix ratios and their prices, cheapest first">
+    {% for option in item.options %}
+    {% recipe_segments option.mix as segments %}
+    {% with currency=option.currency %}
+    <li class="option{% if option.selected %} is-best{% endif %}{% if option.below_strength %} is-weak{% endif %}">
+      <div class="option-row">
+        <div class="option-head">
+          <div class="option-name">{% if user.is_manager %}<a href="{% url 'mix_edit' option.mix.pk %}">{{ option.mix.name }}</a>{% else %}{{ option.mix.name }}{% endif %}</div>
+          <div class="option-meta">{% if option.mix.strength_mpa %}{{ option.mix.strength_mpa|floatformat:"-2" }} MPa{% else %}Strength not set{% endif %}</div>
+          <div class="flags">
+            {% if option.selected %}<span class="flag flag-best">Chosen</span>{% endif %}
+            {% if option.cheapest %}<span class="flag flag-quiet">Cheapest</span>{% endif %}
+            {% if option.below_strength %}<span class="flag flag-weak">Weaker than required</span>{% endif %}
+          </div>
+          {% if user.is_manager and not option.selected %}
+          <form method="post" action="{% url 'project_choose_mix' project.pk item.block.pk %}" class="choose">
+            {% csrf_token %}
+            <button type="submit" name="mix" value="{{ option.mix.pk }}" class="btn btn-quiet btn-small" data-busy-label="Choosing…">Choose this mix</button>
+          </form>
+          {% endif %}
+        </div>
+
+        <div class="option-recipe">
+          {% if segments %}
+          <div class="recipe" role="img" aria-label="Per batch: {% for seg in segments %}{{ seg.quantity|measure:seg.unit }} {{ seg.material.name|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+            {% for seg in segments %}<span class="recipe-seg tone-{{ seg.tone }}" style="flex: {{ seg.percent }}"></span>{% endfor %}
+          </div>
+          <div class="recipe-text">{% for seg in segments %}{{ seg.quantity|measure:seg.unit }} {{ seg.material.name|lower }}{% if not forloop.last %} + {% endif %}{% endfor %}</div>
+          {% else %}
+          <span class="small muted">No ingredients</span>
+          {% endif %}
+        </div>
+
+        <div class="figure figure-batches">
+          <div class="figure-value">{{ option.batches }} batch{{ option.batches|pluralize:"es" }}</div>
+          <div class="figure-label">makes {{ option.blocks_produced }} blocks</div>
+        </div>
+
+        <div class="figure figure-per">
+          {% if option.cost_per_block is not None %}
+          <div class="figure-value">{{ option.cost_per_block|money:currency }}</div>
+          <div class="figure-label">per block</div>
+          {% else %}<div class="figure-label">No cost per block</div>{% endif %}
+        </div>
+
+        <div class="figure figure-sum">
+          {% if option.total is not None %}
+          <div class="figure-total">{{ option.total|money:currency }}</div>
+          <div class="figure-label">materials total</div>
+          {% elif not option.lines %}
+          <div class="figure-label">Add ingredients to price this mix</div>
+          {% else %}
+          <div class="figure-label">Needs an approved price for {{ option.missing_prices|join:", " }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if option.lines %}
+      <details>
+        <summary>Materials for {{ option.batches }} batch{{ option.batches|pluralize:"es" }}</summary>
+        <div class="table-wrap">
+          <table class="table table-compact">
+            <thead><tr><th scope="col">Material</th><th scope="col" class="num">Quantity</th><th scope="col" class="num">Unit price</th><th scope="col" class="num">Subtotal</th></tr></thead>
+            <tbody>
+              {% for line in option.lines %}
+              <tr>
+                <td><span class="swatch tone-{{ line.material|material_tone }}"></span>{{ line.material.name }}</td>
+                <td class="num">{{ line.quantity|measure:line.unit }}</td>
+                <td class="num">
+                  {% if line.unit_price is not None %}{{ line.unit_price|money:line.currency }}{% if line.project_price %} <span class="source source-project">This project</span>{% endif %}
+                  {% else %}<span class="muted">Not approved</span>{% endif %}
+                </td>
+                <td class="num">{% if line.subtotal is not None %}{{ line.subtotal|money:line.currency }}{% else %}<span class="muted">—</span>{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {% endif %}
+    </li>
+    {% endwith %}
+    {% endfor %}
+  </ol>
   {% endif %}
 </section>
 {% endfor %}

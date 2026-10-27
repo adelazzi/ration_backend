@@ -1,57 +1,94 @@
 {% extends "core/base.html" %}
 
-{% block title %}{% if mix.pk %}{{ mix.name }}{% else %}New mix{% endif %} · Ration{% endblock %}
+{% block title %}{% if mix.pk %}{{ mix.name }}{% else %}New mix ratio{% endif %} · Ration{% endblock %}
 
 {% block content %}
-<a href="{% url 'config' %}" class="muted">← Mix configuration</a>
-<h1 style="margin-top: 10px;">{% if mix.pk %}Edit {{ mix.name }}{% else %}New mix ratio{% endif %}</h1>
+<a href="{% url 'config' %}" class="back">Back to mixes and prices</a>
+
+<div class="page-head">
+  <h1 class="display">{% if mix.pk %}{{ mix.name }}{% else %}New mix ratio{% endif %}</h1>
+  <p class="lede">A mix is one batch: how much of each material goes in, and how many blocks it makes.</p>
+</div>
 
 <form method="post" novalidate>
   {% csrf_token %}
-  <section class="panel">
-    {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
-    <div class="grid">
+  {% for error in form.non_field_errors %}<div class="notice notice-error" role="alert">{{ error }}</div>{% endfor %}
+  {% if form.errors or formset.total_error_count %}
+  <div class="notice notice-error" role="alert">Some fields need fixing before this mix can be saved.</div>
+  {% endif %}
+
+  <section aria-labelledby="mix-details">
+    <div class="section-head"><h2 id="mix-details">Mix details</h2></div>
+    <div class="form-grid" style="margin-top: 20px;">
       {% include "core/_field.html" with field=form.name %}
       {% include "core/_field.html" with field=form.block_type %}
       {% include "core/_field.html" with field=form.strength_mpa %}
       {% include "core/_field.html" with field=form.blocks_per_batch %}
     </div>
-    {% include "core/_field.html" with field=form.is_active %}
+    {% include "core/_field.html" with field=form.is_active help="Inactive mixes are left out of project comparisons." %}
   </section>
 
-  <section class="panel">
-    <h2>Ingredients per batch</h2>
-    <p class="muted" style="margin-top: 0;">Quantities are in each material's unit, e.g. 3 wheelbarrows of sand + 1 bag of cement.</p>
+  <section class="section" aria-labelledby="ingredients">
+    <div class="section-head">
+      <div>
+        <h2 id="ingredients">One batch</h2>
+        <p class="muted small">Quantities are in each material's own measure, e.g. 3 wheelbarrows of sand and 1 pocket of cement.</p>
+      </div>
+    </div>
     {{ formset.management_form }}
-    {% for error in formset.non_form_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+    {% for error in formset.non_form_errors %}<div class="notice notice-error" role="alert">{{ error }}</div>{% endfor %}
     <div class="table-wrap">
-      <table>
-        <thead><tr><th>Material</th><th>Quantity per batch</th><th>Remove</th></tr></thead>
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Material</th>
+            <th scope="col">Quantity per batch</th>
+            <th scope="col" class="num">Remove</th>
+          </tr>
+        </thead>
         <tbody>
           {% for ingredient_form in formset %}
           <tr>
-            <td>
+            <td style="min-width: 180px;">
               {% for hidden in ingredient_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <label class="visually-hidden" for="{{ ingredient_form.material.id_for_label }}">Material, row {{ forloop.counter }}</label>
               {{ ingredient_form.material }}
-              {% for error in ingredient_form.material.errors %}<div class="error">{{ error }}</div>{% endfor %}
-              {% for error in ingredient_form.non_field_errors %}<div class="error">{{ error }}</div>{% endfor %}
+              {% for error in ingredient_form.material.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+              {% for error in ingredient_form.non_field_errors %}<span class="field-error">{{ error }}</span>{% endfor %}
             </td>
-            <td>
+            <td style="min-width: 140px;">
+              <label class="visually-hidden" for="{{ ingredient_form.quantity.id_for_label }}">Quantity per batch, row {{ forloop.counter }}</label>
               {{ ingredient_form.quantity }}
-              {% for error in ingredient_form.quantity.errors %}<div class="error">{{ error }}</div>{% endfor %}
+              {% for error in ingredient_form.quantity.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
             </td>
-            <td>{% if ingredient_form.instance.pk %}{{ ingredient_form.DELETE }}{% endif %}</td>
+            <td class="num">
+              {% if ingredient_form.instance.pk %}
+              <label class="visually-hidden" for="{{ ingredient_form.DELETE.id_for_label }}">Remove row {{ forloop.counter }}</label>
+              {{ ingredient_form.DELETE }}
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-    <p class="muted">Need more rows? Save, and 3 empty rows will appear again.</p>
+    <p class="muted small">Need another material? Save the mix and three empty rows appear again.</p>
   </section>
 
-  <div style="margin-top: 20px;">
-    <button type="submit" class="btn">Save mix</button>
-    <a href="{% url 'config' %}" class="btn btn-ghost">Cancel</a>
+  <div class="actions" style="margin-top: 32px;">
+    <button type="submit" class="btn" data-busy-label="Saving…">Save mix</button>
+    <a href="{% url 'config' %}" class="btn btn-quiet">Cancel</a>
   </div>
 </form>
+
+{% if mix.pk %}
+<section class="section danger-zone" aria-labelledby="delete-mix">
+  <div class="section-head"><h2 id="delete-mix">Delete this mix</h2></div>
+  <p class="muted">Projects stop showing {{ mix.name }} in their comparisons. To keep it for later, untick Active instead.</p>
+  <form method="post" action="{% url 'mix_delete' mix.pk %}" data-confirm="Delete {{ mix.name }}? This can't be undone.">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Delete mix</button>
+  </form>
+</section>
+{% endif %}
 {% endblock %}

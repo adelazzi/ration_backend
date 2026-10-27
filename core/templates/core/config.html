@@ -1,103 +1,124 @@
 {% extends "core/base.html" %}
+{% load ration %}
 
-{% block title %}Mix configuration · Ration{% endblock %}
+{% block title %}Mixes and prices · Ration{% endblock %}
 
 {% block content %}
-<h1>Mix configuration</h1>
-<p class="muted">One measure = one full wheelbarrow, except cement = one pocket (50 kg bag).</p>
+<div class="page-head">
+  <h1 class="display">Mixes and prices</h1>
+  <p class="lede">One measure is a full wheelbarrow, except cement, which is one pocket (a 50 kg bag). Default prices apply to every project unless a project has its own approved price.</p>
+</div>
 
-<section class="panel">
-  <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;">
-    <h2 style="margin: 0;">Mix ratios</h2>
-    <a href="{% url 'mix_new' %}" class="btn btn-sm">+ New mix</a>
+{% if user.can_review_prices and not user.is_manager %}
+  {% include "core/_price_history.html" with first=True %}
+{% endif %}
+
+<section class="section{% if user.is_manager %} section-first{% endif %}" aria-labelledby="mixes">
+  <div class="section-head">
+    <h2 id="mixes">Mix ratios</h2>
+    {% if user.is_manager %}<a href="{% url 'mix_new' %}" class="btn btn-small">New mix ratio</a>{% endif %}
   </div>
+  {% if mixes %}
   <div class="table-wrap">
-    <table>
-      <thead><tr><th>Name</th><th>Block</th><th>Ingredients per batch</th><th class="num">Strength</th><th class="num">Blocks / batch</th><th></th></tr></thead>
+    <table class="table mix-table">
+      <thead>
+        <tr>
+          <th scope="col">Mix</th>
+          <th scope="col">One batch</th>
+          <th scope="col">Used for</th>
+          <th scope="col" class="num">Strength</th>
+          <th scope="col" class="num">Blocks a batch</th>
+        </tr>
+      </thead>
       <tbody>
         {% for mix in mixes %}
-        <tr>
-          <td><a href="{% url 'mix_edit' mix.pk %}">{{ mix.name }}</a></td>
-          <td>{{ mix.get_block_type_display }}</td>
-          <td class="muted">{% for ing in mix.ingredients.all %}{{ ing.quantity|floatformat }} {{ ing.unit }} {{ ing.material.name|lower }}{% if not forloop.last %} + {% endif %}{% empty %}—{% endfor %}</td>
-          <td class="num">{% if mix.strength_mpa %}{{ mix.strength_mpa }} MPa{% else %}—{% endif %}</td>
-          <td class="num">{{ mix.blocks_per_batch }}</td>
-          <td>{% if not mix.is_active %}<span class="tag">Inactive</span>{% endif %}</td>
+        {% recipe_segments mix as segments %}
+        <tr{% if not mix.is_active %} class="is-inactive"{% endif %}>
+          <td>
+            {% if user.is_manager %}<a href="{% url 'mix_edit' mix.pk %}">{{ mix.name }}</a>{% else %}{{ mix.name }}{% endif %}
+            {% if not mix.is_active %}<div class="small muted">Inactive</div>{% endif %}
+          </td>
+          <td>
+            {% if segments %}
+            <div class="recipe" aria-hidden="true">
+              {% for seg in segments %}<span class="recipe-seg tone-{{ seg.tone }}" style="flex: {{ seg.percent }}"></span>{% endfor %}
+            </div>
+            <div class="recipe-text">{% for seg in segments %}{{ seg.quantity|measure:seg.unit }} {{ seg.material.name|lower }}{% if not forloop.last %} + {% endif %}{% endfor %}</div>
+            {% else %}<span class="small muted">No ingredients yet</span>{% endif %}
+          </td>
+          <td data-label="For">{{ mix.get_block_type_display|lower }}</td>
+          <td class="num">{% if mix.strength_mpa %}{{ mix.strength_mpa|floatformat:"-2" }} MPa{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="num">{{ mix.blocks_per_batch }}<span class="mobile-only"> blocks a batch</span></td>
         </tr>
-        {% empty %}
-        <tr><td colspan="6" class="muted">No mix ratios yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% else %}
+  <p class="empty">No mix ratios yet.{% if user.is_manager %} <a href="{% url 'mix_new' %}">Add your first one</a>.{% endif %}</p>
+  {% endif %}
 </section>
 
-<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
-  <section class="panel">
-    <h2>Materials</h2>
+<section class="section{% if user.is_manager %} split{% endif %}" aria-labelledby="materials">
+  <div>
+    <div class="section-head">
+      <h2 id="materials">Materials</h2>
+    </div>
+    {% if materials %}
     <div class="table-wrap">
-      <table>
-        <thead><tr><th>Name</th><th>Unit</th></tr></thead>
+      <table class="table">
+        <thead><tr><th scope="col">Material</th><th scope="col" class="hide-sm">Measured in</th><th scope="col" class="num">Default price</th></tr></thead>
         <tbody>
           {% for material in materials %}
-          <tr><td>{{ material.name }}</td><td>{{ material.base_unit }}</td></tr>
-          {% empty %}
-          <tr><td colspan="2" class="muted">No materials yet.</td></tr>
+          <tr{% if not material.is_active %} class="is-inactive"{% endif %}>
+            <td>
+              <span class="swatch tone-{{ material|material_tone }}"></span>{% if user.is_manager %}<a href="{% url 'material_edit' material.pk %}">{{ material.name }}</a>{% else %}{{ material.name }}{% endif %}
+              {% if not material.is_active %}<div class="small muted">Unavailable</div>{% endif %}
+            </td>
+            <td class="muted hide-sm">{{ material.base_unit }}s</td>
+            <td class="num">
+              {% if material.current_price %}
+                {{ material.current_unit_price|money:material.current_price.currency }} <span class="muted small">per {{ material.base_unit }}</span>
+              {% else %}<span class="status status-pending">No approved price</span>{% endif %}
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-    <form method="post" action="{% url 'material_add' %}" style="margin-top: 16px;">
-      {% csrf_token %}
-      <h3>Add material</h3>
-      {% include "core/_field.html" with field=material_form.name %}
-      {% include "core/_field.html" with field=material_form.base_unit %}
-      <button type="submit" class="btn btn-sm">Add material</button>
-    </form>
-  </section>
-
-  <section class="panel">
-    <h2>Add price</h2>
-    <p class="muted" style="margin-top: 0;">New prices must be approved by an accountant before they are used in calculations.</p>
-    <form method="post" action="{% url 'price_add' %}">
-      {% csrf_token %}
-      {% include "core/_field.html" with field=price_form.material %}
-      {% include "core/_field.html" with field=price_form.price %}
-      {% include "core/_field.html" with field=price_form.price_unit %}
-      {% include "core/_field.html" with field=price_form.currency %}
-      <button type="submit" class="btn btn-sm">Submit price</button>
-    </form>
-  </section>
-</div>
-
-<section class="panel">
-  <h2>Material prices</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Material</th><th class="num">Price</th><th>Status</th><th>Entered by</th><th>Reviewed by</th><th></th></tr></thead>
-      <tbody>
-        {% for price in prices %}
-        <tr>
-          <td>{{ price.material.name }}</td>
-          <td class="num">{{ price.price }} {{ price.currency }} / {% if price.unit == 'm3' %}m³{% else %}{{ price.unit }}{% endif %}</td>
-          <td><span class="tag tag-{{ price.status }}">{{ price.get_status_display }}</span></td>
-          <td class="muted">{{ price.created_by.full_name|default:price.created_by.username }}</td>
-          <td class="muted">{{ price.reviewed_by.full_name|default:price.reviewed_by.username|default:"—" }}</td>
-          <td>
-            {% if can_review and price.status == 'pending' %}
-            <form method="post" action="{% url 'price_review' price.pk %}" class="inline-form">
-              {% csrf_token %}
-              <button name="decision" value="approved" class="btn btn-sm">Approve</button>
-              <button name="decision" value="declined" class="btn btn-ghost btn-sm">Decline</button>
-            </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="6" class="muted">No prices yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% else %}
+    <p class="empty">No materials yet.{% if user.is_manager %} Add sand, stone and cement to start building mixes.{% endif %}</p>
+    {% endif %}
   </div>
+
+  {% if user.is_manager %}
+  <div>
+    <form method="post" action="{% url 'price_add' %}" class="subform" novalidate>
+      {% csrf_token %}
+      <h3>Add a default price</h3>
+      {% include "core/_field.html" with field=price_form.material %}
+      <div class="form-grid">
+        {% include "core/_field.html" with field=price_form.price %}
+        {% include "core/_field.html" with field=price_form.currency %}
+      </div>
+      {% include "core/_field.html" with field=price_form.price_unit %}
+      <div class="field"><button type="submit" class="btn btn-small" data-busy-label="Sending…">Send for approval</button></div>
+    </form>
+
+    <form method="post" action="{% url 'material_add' %}" class="subform" novalidate>
+      {% csrf_token %}
+      <h3>Add a material</h3>
+      <div class="form-grid">
+        {% include "core/_field.html" with field=material_form.name %}
+        {% include "core/_field.html" with field=material_form.base_unit %}
+      </div>
+      <div class="field"><button type="submit" class="btn btn-quiet btn-small">Add material</button></div>
+    </form>
+  </div>
+  {% endif %}
 </section>
+
+{% if user.is_manager %}
+  {% include "core/_price_history.html" %}
+{% endif %}
 {% endblock %}

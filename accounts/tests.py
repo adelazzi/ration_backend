@@ -16,7 +16,7 @@ class AuthFlowTests(TestCase):
             'password': 'S0me-strong-pass',
             'confirm_password': 'S0me-strong-pass',
         })
-        self.assertRedirects(response, reverse('home'))
+        self.assertRedirects(response, reverse('home'), fetch_redirect_response=False)
         self.assertTrue(User.objects.filter(username='adel').exists())
 
     def test_register_rejects_mismatched_passwords(self):
@@ -35,7 +35,7 @@ class AuthFlowTests(TestCase):
             'email': 'ADEL@example.com',
             'password': 'S0me-strong-pass',
         })
-        self.assertRedirects(response, reverse('home'))
+        self.assertRedirects(response, reverse('home'), fetch_redirect_response=False)
 
     def test_login_wrong_password(self):
         User.objects.create_user('adel', 'adel@example.com', 'S0me-strong-pass')

@@ -1,0 +1,68 @@
+{% extends "core/base.html" %}
+{% load ration %}
+
+{% block title %}New project · Ration{% endblock %}
+
+{% block content %}
+<div class="home">
+  <section aria-labelledby="new-project">
+    <div class="page-head">
+      <h1 class="display" id="new-project">How many blocks does the job need?</h1>
+      <p class="lede">Enter the counts and we'll price every active mix ratio, cheapest first.</p>
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="notice notice-error" role="alert">{{ error }}</div>{% endfor %}
+
+      <div class="quantities">
+        {% include "core/_quantity.html" with field=form.full_quantity label="Full blocks" autofocus=True %}
+        {% include "core/_quantity.html" with field=form.half_quantity label="Half blocks" %}
+      </div>
+
+      <div class="form-grid">
+        {% include "core/_field.html" with field=form.name %}
+        {% include "core/_field.html" with field=form.required_strength_mpa help="Mixes weaker than this are marked, not hidden." %}
+      </div>
+      {% include "core/_field.html" with field=form.description %}
+
+      <div class="actions">
+        <button type="submit" class="btn btn-submit" data-busy-label="Pricing mixes…">Compare mix costs</button>
+      </div>
+    </form>
+  </section>
+
+  <aside class="mix-preview" aria-labelledby="mix-preview-title">
+    <h2 id="mix-preview-title">Mixes in the comparison</h2>
+    {% if mixes %}
+    <ul class="mix-list">
+      {% for mix in mixes %}
+      {% recipe_segments mix as segments %}
+      <li>
+        <div class="row">
+          <span>{{ mix.name }}</span>
+          <span class="muted">{{ mix.blocks_per_batch }} blocks a batch</span>
+        </div>
+        {% if segments %}
+        <div class="recipe" role="img" aria-label="{% for seg in segments %}{{ seg.quantity|measure:seg.unit }} {{ seg.material.name|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+          {% for seg in segments %}<span class="recipe-seg tone-{{ seg.tone }}" style="flex: {{ seg.percent }}"></span>{% endfor %}
+        </div>
+        {% else %}
+        <span class="small muted">No ingredients yet</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <ul class="legend" aria-label="Colour key">
+      <li><span class="swatch tone-sand"></span>Sand</li>
+      <li><span class="swatch tone-stone"></span>Stone</li>
+      <li><span class="swatch tone-cement"></span>Cement</li>
+    </ul>
+    <a href="{% url 'config' %}" class="small">Edit mixes and prices</a>
+    {% else %}
+    <p class="empty">No active mixes yet. <a href="{% url 'mix_new' %}">Add your first mix ratio</a> to start comparing.</p>
+    {% endif %}
+  </aside>
+</div>
+
+{% endblock %}

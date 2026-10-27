@@ -8,6 +8,12 @@ class BlockType(models.TextChoices):
     FULL = 'F', 'Full'
 
 
+class MixBlockType(models.TextChoices):
+    BOTH = 'B', 'Both (half and full)'
+    HALF = 'H', 'Half'
+    FULL = 'F', 'Full'
+
+
 class Project(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Draft'
@@ -37,6 +43,8 @@ class ProjectBlock(models.Model):
     block_type = models.CharField(max_length=1, choices=BlockType.choices)
     quantity = models.PositiveIntegerField()
     required_strength_mpa = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    # The mix chosen for this line; empty means "use the cheapest suitable mix".
+    mix = models.ForeignKey('MixRatio', on_delete=models.SET_NULL, null=True, blank=True, related_name='project_blocks')
 
     class Meta:
         db_table = 'project_blocks'
@@ -63,8 +71,8 @@ class Material(models.Model):
 
 class MixRatio(models.Model):
     name = models.CharField(max_length=100)
-    # Business rule 4: the yield is defined for a specific block type.
-    block_type = models.CharField(max_length=1, choices=BlockType.choices)
+    # Business rule 4: the yield is defined for the block types the mix applies to.
+    block_type = models.CharField(max_length=1, choices=MixBlockType.choices, default=MixBlockType.BOTH)
     strength_mpa = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     blocks_per_batch = models.PositiveIntegerField()
     is_active = models.BooleanField(default=True)
@@ -73,7 +81,7 @@ class MixRatio(models.Model):
         db_table = 'mix_ratios'
         constraints = [
             models.CheckConstraint(condition=Q(blocks_per_batch__gt=0), name='mix_blocks_per_batch_gt_0'),
-            models.CheckConstraint(condition=Q(block_type__in=['H', 'F']), name='mix_block_type_h_or_f'),
+            models.CheckConstraint(condition=Q(block_type__in=['B', 'H', 'F']), name='mix_block_type_b_h_or_f'),
         ]
 
     def __str__(self):
@@ -103,6 +111,10 @@ class MaterialPrice(models.Model):
         DECLINED = 'declined', 'Declined'
 
     material = models.ForeignKey(Material, on_delete=models.PROTECT, related_name='prices')
+    # Empty for a default price; set when the price only applies to one project.
+    project = models.ForeignKey(
+        'Project', on_delete=models.CASCADE, null=True, blank=True, related_name='material_prices'
+    )
     price = models.DecimalField(max_digits=12, decimal_places=2)
     unit = models.CharField(max_length=20)
     currency = models.CharField(max_length=3, default='ZAR')

@@ -1,0 +1,32 @@
+{% load ration %}{% if price.status == 'pending' %}
+<div class="row-actions">
+  {% if user.can_review_prices %}
+  <form method="post" action="{% url 'price_review' price.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button name="decision" value="approved" class="btn btn-small" data-busy-label="Approving…">Approve</button>
+  </form>
+  <details class="decline">
+    <summary class="btn btn-quiet btn-small">Decline</summary>
+    <form method="post" action="{% url 'price_review' price.pk %}" class="decline-form">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <input type="hidden" name="decision" value="declined">
+      <label for="corrected-{{ price.pk }}">Correct price per {{ price.unit|unit_label }} <span class="muted">(optional)</span></label>
+      <div class="decline-row">
+        <input type="text" inputmode="decimal" id="corrected-{{ price.pk }}" name="corrected_price" placeholder="{{ price.price }}" autocomplete="off">
+        <button type="submit" class="btn btn-small btn-danger" data-busy-label="Declining…">Decline</button>
+      </div>
+      <span class="field-help">Leave empty to just decline. A correct price is approved straight away{% if price.project_id %} for this project{% endif %}.</span>
+    </form>
+  </details>
+  {% endif %}
+  {% if user.is_manager %}
+  <form method="post" action="{% url 'price_delete' price.pk %}" data-confirm="Withdraw this {{ price.material.name }} price?">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit" class="btn btn-quiet btn-small">Withdraw</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}

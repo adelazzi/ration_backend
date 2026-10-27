@@ -1,0 +1,6 @@
+<div class="quantity">
+  <label for="{{ field.id_for_label }}">{{ label }}</label>
+  <input type="number" inputmode="numeric" min="0" step="1" name="{{ field.html_name }}" id="{{ field.id_for_label }}"
+         value="{{ field.value|default_if_none:'0' }}"{% if autofocus %} autofocus{% endif %}{% if field.errors %} aria-invalid="true"{% endif %}>
+  {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+</div>

@@ -1,0 +1,78 @@
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ration
+          POSTGRES_PASSWORD: ration
+          POSTGRES_DB: ration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ration"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Same production settings as Render, against a throwaway Postgres.
+      DATABASE_URL: postgres://ration:ration@localhost:5432/ration
+      DJANGO_DEBUG: "false"
+      DJANGO_SECRET_KEY: ci-only-not-secret-${{ github.run_id }}-padding-to-pass-length-checks
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      # The test client talks plain HTTP; Render keeps the HTTPS redirect on.
+      DJANGO_SECURE_SSL_REDIRECT: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Collect static files
+        run: python manage.py collectstatic --no-input
+
+      - name: Run tests
+        run: python manage.py test
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+
+    steps:
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::error::Add the RENDER_DEPLOY_HOOK_URL secret (Render > ration > Settings > Deploy Hook)."
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL"
+          echo "Render deploy started."

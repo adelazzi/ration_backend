@@ -1,0 +1,31 @@
+# Render Blueprint: a Django web service plus a Postgres database.
+# Create it once in Render with New > Blueprint and pick this repository.
+# Deploys are triggered by the GitHub workflow after the tests pass, not by every push.
+services:
+  - type: web
+    name: ration
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: ./build.sh
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2
+    healthCheckPath: /login/
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ration-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: WEB_CONCURRENCY
+        value: "2"
+
+databases:
+  - name: ration-db
+    plan: free
+    region: frankfurt
+    databaseName: ration
+    user: ration

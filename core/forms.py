@@ -31,11 +31,36 @@ class ProjectForm(forms.ModelForm):
                 yield block_type, quantity
 
 
+class ProjectEditForm(ProjectForm):
+    """Manager edit: same fields as creating, plus the workflow status."""
+
+    class Meta(ProjectForm.Meta):
+        fields = ['name', 'description', 'status']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and not self.is_bound:
+            blocks = {b.block_type: b for b in self.instance.blocks.all()}
+            self.initial['half_quantity'] = blocks['H'].quantity if 'H' in blocks else 0
+            self.initial['full_quantity'] = blocks['F'].quantity if 'F' in blocks else 0
+            strengths = [b.required_strength_mpa for b in blocks.values() if b.required_strength_mpa is not None]
+            self.initial['required_strength_mpa'] = strengths[0] if strengths else None
+
+
 class MaterialForm(forms.ModelForm):
     class Meta:
         model = Material
         fields = ['name', 'base_unit']
         labels = {'base_unit': 'Unit (e.g. wheelbarrow, bag)'}
+
+
+class MaterialEditForm(forms.ModelForm):
+    """The unit is fixed once a material exists, so old prices and mixes keep their meaning."""
+
+    class Meta:
+        model = Material
+        fields = ['name', 'is_active']
+        labels = {'is_active': 'Available for new mixes and prices'}
 
 
 class MaterialPriceForm(forms.ModelForm):
@@ -58,6 +83,9 @@ class MaterialPriceForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['material'].queryset = Material.objects.filter(is_active=True)
 
+    def clean_currency(self):
+        return self.cleaned_data['currency'].strip().upper()
+
     def clean(self):
         cleaned = super().clean()
         material = cleaned.get('material')
@@ -78,6 +106,7 @@ class MixRatioForm(forms.ModelForm):
         model = MixRatio
         fields = ['name', 'block_type', 'strength_mpa', 'blocks_per_batch', 'is_active']
         labels = {
+            'block_type': 'Used for',
             'strength_mpa': 'Strength (MPa)',
             'blocks_per_batch': 'Blocks per batch',
             'is_active': 'Active',

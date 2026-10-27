@@ -1,80 +1,35 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Ration{% endblock %}</title>
-  <style>
-    * { box-sizing: border-box; }
-    html, body { margin: 0; background: #000; color: #f2f2f2; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-    a { color: #f2f2f2; }
-    header {
-      display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-      padding: 14px 24px; border-bottom: 1px solid #1f1f1f; font-size: 14px;
-    }
-    header .brand { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; text-decoration: none; }
-    header nav { display: flex; gap: 16px; }
-    header nav a { color: #8a8a8a; text-decoration: none; }
-    header nav a.active, header nav a:hover { color: #f2f2f2; }
-    header .user { margin-left: auto; display: flex; align-items: center; gap: 12px; color: #8a8a8a; }
-    main { max-width: 1000px; margin: 0 auto; padding: 32px 24px 64px; }
-    h1 { font-size: 26px; margin: 0 0 6px; }
-    h2 { font-size: 18px; margin: 0 0 14px; }
-    h3 { font-size: 15px; margin: 0 0 10px; }
-    .muted { color: #8a8a8a; font-size: 14px; }
-    .panel { background: #0e0e0e; border: 1px solid #1f1f1f; border-radius: 12px; padding: 22px; margin-top: 20px; }
-    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-    .field { margin-bottom: 14px; }
-    .field label { display: block; font-size: 13px; color: #b5b5b5; margin-bottom: 6px; }
-    .field.checkbox label { display: flex; gap: 8px; align-items: center; }
-    input[type=text], input[type=number], input[type=email], input[type=password], select, textarea {
-      width: 100%; padding: 10px 12px; font: inherit; font-size: 15px; color: #f2f2f2;
-      background: #000; border: 1px solid #333; border-radius: 8px; outline: none;
-    }
-    input:focus, select:focus, textarea:focus { border-color: #f2f2f2; }
-    .error { color: #ff6b6b; font-size: 13px; margin-top: 6px; }
-    .form-error, .msg-error { background: #2a1414; border: 1px solid #5c2323; color: #ff8a8a; padding: 10px 12px; border-radius: 8px; font-size: 14px; margin-bottom: 14px; }
-    .msg-success { background: #10241a; border: 1px solid #1f5c3a; color: #7ee2a8; padding: 10px 12px; border-radius: 8px; font-size: 14px; margin-bottom: 14px; }
-    .btn {
-      display: inline-block; padding: 10px 18px; font: inherit; font-size: 14px; font-weight: 600;
-      color: #000; background: #f2f2f2; border: 0; border-radius: 8px; cursor: pointer; text-decoration: none;
-    }
-    .btn:hover { background: #fff; }
-    .btn-ghost { background: none; color: #f2f2f2; border: 1px solid #333; font-weight: 500; }
-    .btn-ghost:hover { background: none; border-color: #f2f2f2; }
-    .btn-sm { padding: 5px 10px; font-size: 13px; }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #1f1f1f; vertical-align: middle; }
-    th { color: #8a8a8a; font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
-    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-    .table-wrap { overflow-x: auto; }
-    .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid #333; color: #b5b5b5; }
-    .tag-approved { border-color: #1f5c3a; color: #7ee2a8; }
-    .tag-declined { border-color: #5c2323; color: #ff8a8a; }
-    .tag-pending { border-color: #5c4a1f; color: #e8c46a; }
-    .tag-best { border-color: #f2f2f2; color: #000; background: #f2f2f2; font-weight: 600; }
-    .inline-form { display: inline; }
-    @media (max-width: 600px) { main { padding: 24px 16px 48px; } header { padding: 12px 16px; } }
-  </style>
+  {% include "core/_head.html" %}
 </head>
 <body>
-  <header>
-    <a class="brand" href="{% url 'home' %}">Ration</a>
-    <nav>
-      <a href="{% url 'home' %}" class="{% if request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'project_detail' %}active{% endif %}">Projects</a>
-      <a href="{% url 'config' %}" class="{% if 'config' in request.path %}active{% endif %}">Mix configuration</a>
+  <a href="#main" class="visually-hidden">Skip to content</a>
+  <header class="topbar">
+    <a class="wordmark" href="{% url 'project_list' %}" aria-label="Ration home">
+      <span class="wordmark-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+      Ration
+    </a>
+    {% with name=request.resolver_match.url_name %}
+    <nav class="nav" aria-label="Main">
+      <a href="{% url 'project_list' %}" {% if name == 'project_list' or name == 'project_detail' or name == 'project_edit' %}aria-current="page"{% endif %}>Projects</a>
+      {% if user.is_manager %}<a href="{% url 'project_new' %}" {% if name == 'project_new' %}aria-current="page"{% endif %}>New project</a>{% endif %}
+      {% if user.can_view_config %}<a href="{% url 'config' %}" {% if name == 'config' or name == 'mix_new' or name == 'mix_edit' or name == 'material_edit' %}aria-current="page"{% endif %}>Mixes and prices</a>{% endif %}
     </nav>
-    <div class="user">
-      <span>{{ user.full_name|default:user.username }} · {{ user.get_role_display }}</span>
-      <form method="post" action="{% url 'logout' %}" class="inline-form">
+    {% endwith %}
+    <div class="account">
+      <span><span class="account-name">{{ user }}</span> <span class="account-role">({{ user.get_role_display|lower }})</span></span>
+      <form method="post" action="{% url 'logout' %}">
         {% csrf_token %}
-        <button type="submit" class="btn btn-ghost btn-sm">Log out</button>
+        <button type="submit" class="btn btn-quiet btn-small">Log out</button>
       </form>
     </div>
   </header>
-  <main>
+
+  <main id="main" class="page">
     {% for message in messages %}
-      <div class="msg-{{ message.tags }}">{{ message }}</div>
+      <div class="notice notice-{{ message.tags }}" role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}">{{ message }}</div>
     {% endfor %}
     {% block content %}{% endblock %}
   </main>

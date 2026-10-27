@@ -4,23 +4,24 @@
 
 {% block content %}
 <h1>Log in</h1>
+<p class="lede">Use the email you registered with.</p>
 <form method="post" novalidate>
   {% csrf_token %}
-  {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+  {% for error in form.non_field_errors %}<div class="notice notice-error" role="alert">{{ error }}</div>{% endfor %}
 
-  <div class="field">
+  <div class="field{% if form.email.errors %} has-error{% endif %}">
     <label for="id_email">Email</label>
     <input type="email" name="email" id="id_email" value="{{ form.email.value|default:'' }}" autocomplete="email" required autofocus>
-    {% for error in form.email.errors %}<div class="error">{{ error }}</div>{% endfor %}
+    {% for error in form.email.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
   </div>
 
-  <div class="field">
+  <div class="field{% if form.password.errors %} has-error{% endif %}">
     <label for="id_password">Password</label>
     <input type="password" name="password" id="id_password" autocomplete="current-password" required>
-    {% for error in form.password.errors %}<div class="error">{{ error }}</div>{% endfor %}
+    {% for error in form.password.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
   </div>
 
-  <button type="submit">Log in</button>
+  <button type="submit" class="btn btn-wide" data-busy-label="Logging in…">Log in</button>
 </form>
-<p class="switch">Don't have an account? <a href="{% url 'register' %}">Register</a></p>
+<p class="auth-switch">No account yet? <a href="{% url 'register' %}">Register</a></p>
 {% endblock %}

@@ -1,0 +1,18 @@
+{% extends "core/base.html" %}
+
+{% block title %}Not allowed · Ration{% endblock %}
+
+{% block content %}
+<div class="error-page">
+  <h1 class="display">You can't open this page</h1>
+  <p class="lede">
+    Your account is {{ user.get_role_display|lower|default:"not signed in" }}.
+    {% if user.role == 'accountant' %}Accountants review material prices; managers create and edit projects, mixes and materials.
+    {% elif user.role == 'creator' %}Creators can read approved project reports. Ask a manager if you need more access.
+    {% else %}Ask a manager if you need access.{% endif %}
+  </p>
+  <div class="actions" style="margin-top: 24px;">
+    <a href="{% url 'project_list' %}" class="btn">Go to projects</a>
+  </div>
+</div>
+{% endblock %}

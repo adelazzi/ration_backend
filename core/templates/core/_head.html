@@ -1,0 +1,25 @@
+{% load static %}<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+<link rel="stylesheet" href="{% static 'core/ration.css' %}">
+<script>
+  // Ask before destructive submits (data-confirm), then show a busy state on the clicked button
+  // so a slow submit can't be sent twice.
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) {
+      event.preventDefault();
+      return;
+    }
+    var button = event.submitter;
+    if (!button || !button.dataset.busyLabel) return;
+    setTimeout(function () {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.textContent = button.dataset.busyLabel;
+    }, 0);
+  });
+</script>

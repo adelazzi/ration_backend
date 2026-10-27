@@ -1,0 +1,43 @@
+{% extends "core/base.html" %}
+
+{% block title %}Edit {{ project.name }} · Ration{% endblock %}
+
+{% block content %}
+<a href="{% url 'project_detail' project.pk %}" class="back">Back to {{ project.name }}</a>
+
+<div class="page-head">
+  <h1 class="display">Edit project</h1>
+  <p class="lede">Changing the block counts reprices every mix on the project page.</p>
+</div>
+
+<form method="post" novalidate class="narrow">
+  {% csrf_token %}
+  {% for error in form.non_field_errors %}<div class="notice notice-error" role="alert">{{ error }}</div>{% endfor %}
+
+  <div class="quantities">
+    {% include "core/_quantity.html" with field=form.full_quantity label="Full blocks" %}
+    {% include "core/_quantity.html" with field=form.half_quantity label="Half blocks" %}
+  </div>
+
+  <div class="form-grid">
+    {% include "core/_field.html" with field=form.name %}
+    {% include "core/_field.html" with field=form.status %}
+  </div>
+  {% include "core/_field.html" with field=form.required_strength_mpa help="Mixes weaker than this are marked, not hidden." %}
+  {% include "core/_field.html" with field=form.description %}
+
+  <div class="actions">
+    <button type="submit" class="btn" data-busy-label="Saving…">Save project</button>
+    <a href="{% url 'project_detail' project.pk %}" class="btn btn-quiet">Cancel</a>
+  </div>
+</form>
+
+<section class="section danger-zone" aria-labelledby="delete-project">
+  <div class="section-head"><h2 id="delete-project">Delete this project</h2></div>
+  <p class="muted">The project and its block counts are removed for everyone. This can't be undone.</p>
+  <form method="post" action="{% url 'project_delete' project.pk %}" data-confirm="Delete &quot;{{ project.name }}&quot;? This can't be undone.">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Delete project</button>
+  </form>
+</section>
+{% endblock %}
