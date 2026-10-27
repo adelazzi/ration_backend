@@ -211,15 +211,16 @@ class RoleTests(BaseTestCase):
         self.as_role(User.Role.CREATOR)
         self.assertEqual(self.client.get(reverse('config')).status_code, 403)
 
-    def test_manager_edits_project_status_and_blocks(self):
+    def test_manager_edits_project_name_and_blocks(self):
         project = self.make_project()
         response = self.client.post(reverse('project_edit', args=[project.pk]), {
-            'name': 'Renamed', 'description': '', 'status': 'approved',
+            'name': 'Renamed', 'description': '', 'status': 'completed',
             'full_quantity': '0', 'half_quantity': '40',
         })
         self.assertRedirects(response, reverse('project_detail', args=[project.pk]))
         project.refresh_from_db()
-        self.assertEqual((project.name, project.status), ('Renamed', 'approved'))
+        # Status is ignored here; it only changes through the status form.
+        self.assertEqual((project.name, project.status), ('Renamed', 'draft'))
         self.assertEqual(list(project.blocks.values_list('block_type', 'quantity')), [('H', 40)])
 
     def test_manager_deletes_project(self):
@@ -412,3 +413,96 @@ class ProjectCostTests(BaseTestCase):
         response = self.client.get(reverse('project_detail', args=[self.project.pk]))
         self.assertContains(response, 'Materials for the whole project')
         self.assertContains(response, 'This project')
+
+
+class ProjectStatusTests(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.load_cape_town_prices()
+        self.project = Project.objects.create(name='House', created_by=self.user)
+        self.block = ProjectBlock.objects.create(project=self.project, block_type='F', quantity=70)
+        self.url = reverse('project_status', args=[self.project.pk])
+
+    def choose_mix(self):
+        self.block.mix = MixRatio.objects.get(name='Batch 4 (optimum)')
+        self.block.save()
+
+    def complete(self):
+        self.choose_mix()
+        return self.client.post(self.url, {'status': 'completed'})
+
+    def test_manager_changes_status(self):
+        self.assertRedirects(self.client.post(self.url, {'status': 'approved'}),
+                             reverse('project_detail', args=[self.project.pk]))
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, 'approved')
+
+    def test_unknown_status_is_rejected(self):
+        self.client.post(self.url, {'status': 'archived'})
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, 'draft')
+
+    def test_cannot_complete_without_chosen_mixes(self):
+        self.client.post(self.url, {'status': 'completed'})
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, 'draft')
+        self.assertFalse(self.project.estimates.exists())
+
+    def test_completing_saves_costs_as_history(self):
+        self.complete()
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, 'completed')
+        self.assertIsNotNone(self.project.completed_at)
+        estimate = self.project.estimates.get()
+        # 70 full with Batch 4: 3 batches x (2 x 16.43 + 2 x 21.75 + 85).
+        self.assertEqual(estimate.total_material_cost, Decimal('484.08'))
+        self.assertEqual(estimate.version, 1)
+        self.assertEqual(estimate.breakdown[0]['mix'], 'Batch 4 (optimum)')
+        per_batch = {i['material']: Decimal(i['quantity']) for i in estimate.breakdown[0]['ingredients']}
+        self.assertEqual(per_batch, {'Sand': 2, 'Stone 13mm': 2, 'Cement 50kg': 1})
+        sand = estimate.materials.get(material__name='Sand')
+        self.assertEqual((sand.quantity_required, sand.unit_price_snapshot), (Decimal('6'), Decimal('16.43')))
+
+    def test_history_ignores_later_price_changes(self):
+        self.complete()
+        self.approve_price('Cement 50kg', '200.00')
+        response = self.client.get(reverse('project_detail', args=[self.project.pk]))
+        self.assertContains(response, 'R 484.08')
+        self.assertContains(response, 'Later price or mix changes')
+
+    def test_completed_project_is_locked(self):
+        self.complete()
+        detail = reverse('project_detail', args=[self.project.pk])
+        mix = MixRatio.objects.get(name='Batch 2')
+        sand = Material.objects.get(name='Sand')
+        attempts = [
+            self.client.get(reverse('project_edit', args=[self.project.pk])),
+            self.client.post(reverse('project_edit', args=[self.project.pk]),
+                             {'name': 'X', 'full_quantity': '1', 'half_quantity': '0'}),
+            self.client.post(reverse('project_delete', args=[self.project.pk])),
+            self.client.post(reverse('project_choose_mix', args=[self.project.pk, self.block.pk]), {'mix': mix.pk}),
+            self.client.post(reverse('project_price_add', args=[self.project.pk]), {
+                'price-material': sand.pk, 'price-price': '1', 'price-price_unit': 'base', 'price-currency': 'ZAR',
+            }),
+            self.client.post(self.url, {'status': 'draft'}),
+        ]
+        for response in attempts:
+            self.assertRedirects(response, detail)
+        self.project.refresh_from_db()
+        self.block.refresh_from_db()
+        self.assertEqual((self.project.name, self.project.status), ('House', 'completed'))
+        self.assertEqual(self.block.mix.name, 'Batch 4 (optimum)')
+        self.assertFalse(MaterialPrice.objects.filter(project=self.project).exists())
+
+    def test_completed_page_hides_edit_controls(self):
+        self.complete()
+        response = self.client.get(reverse('project_detail', args=[self.project.pk]))
+        self.assertNotContains(response, 'Edit project')
+        self.assertNotContains(response, 'Choose this mix')
+        self.assertNotContains(response, 'Change status')
+        self.assertContains(response, 'kept as history')
+
+    def test_only_manager_changes_status(self):
+        accountant = User.objects.create_user('acc', 'acc@example.com', 'S0me-strong-pass', role=User.Role.ACCOUNTANT)
+        self.client.force_login(accountant)
+        self.assertEqual(self.client.post(self.url, {'status': 'approved'}).status_code, 403)

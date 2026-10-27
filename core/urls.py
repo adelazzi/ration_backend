@@ -9,6 +9,7 @@ urlpatterns = [
     path('projects/<int:pk>/', views.project_detail_view, name='project_detail'),
     path('projects/<int:pk>/edit/', views.project_edit_view, name='project_edit'),
     path('projects/<int:pk>/delete/', views.project_delete_view, name='project_delete'),
+    path('projects/<int:pk>/status/', views.project_status_view, name='project_status'),
     path('projects/<int:pk>/blocks/<int:block_pk>/mix/', views.project_choose_mix_view, name='project_choose_mix'),
     path('projects/<int:pk>/prices/add/', views.project_price_add_view, name='project_price_add'),
     path('config/', views.config_view, name='config'),

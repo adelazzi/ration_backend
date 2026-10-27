@@ -393,6 +393,16 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--sand); mar
 .source { font-size: 0.75rem; color: var(--dust); border: 1px solid var(--form-line); border-radius: 2px; padding: 1px 6px; white-space: nowrap; }
 .source-project { color: var(--sand); border-color: rgba(210, 165, 78, 0.5); }
 .subhead { margin: 32px 0 6px; }
+
+.head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.status-panel { max-width: 640px; }
+.status-now { display: grid; gap: 6px; margin: 18px 0 20px; }
+.status-now p { margin: 0; }
+.status-lg { font-size: 1.0625rem; font-weight: 600; }
+.status-lg::before { width: 9px; height: 9px; }
+.status-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.status-form .field { margin-bottom: 0; }
+.status-form select { min-width: 220px; }
 h2[id], section[id] { scroll-margin-top: 28px; }
 
 .flags { display: flex; flex-wrap: wrap; gap: 6px; }

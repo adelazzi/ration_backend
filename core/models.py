@@ -30,12 +30,22 @@ class Project(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'projects'
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_locked(self):
+        """Completed projects are history: their costs are saved and they can't be changed."""
+        return self.status == self.Status.COMPLETED
+
+    @property
+    def final_estimate(self):
+        return self.estimates.order_by('-version').first() if self.is_locked else None
 
 
 class ProjectBlock(models.Model):
@@ -145,6 +155,8 @@ class ProjectEstimate(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='estimates'
     )
     calculated_at = models.DateTimeField(auto_now_add=True)
+    # Snapshot of each block line at calculation time: block type, quantity, mix, batches, cost.
+    breakdown = models.JSONField(default=list, blank=True)
 
     class Meta:
         db_table = 'project_estimates'

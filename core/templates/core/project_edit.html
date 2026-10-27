@@ -19,10 +19,7 @@
     {% include "core/_quantity.html" with field=form.half_quantity label="Half blocks" %}
   </div>
 
-  <div class="form-grid">
-    {% include "core/_field.html" with field=form.name %}
-    {% include "core/_field.html" with field=form.status %}
-  </div>
+  {% include "core/_field.html" with field=form.name %}
   {% include "core/_field.html" with field=form.required_strength_mpa help="Mixes weaker than this are marked, not hidden." %}
   {% include "core/_field.html" with field=form.description %}
 

@@ -41,6 +41,17 @@ def recipe_segments(mix):
 
 
 @register.filter
+def decimal(value):
+    """Turn a saved number string (from an estimate snapshot) back into a Decimal."""
+    if value in (None, ''):
+        return None
+    try:
+        return Decimal(str(value))
+    except ArithmeticError:
+        return None
+
+
+@register.filter
 def money(value, currency='ZAR'):
     if value is None:
         return ''

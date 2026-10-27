@@ -1,0 +1,80 @@
+{% load ration %}
+<section class="project-total" aria-labelledby="final-total">
+  <h2 id="final-total" class="visually-hidden">Saved project total</h2>
+  <p class="total-figure">
+    <span class="total-label">Materials for the whole project, saved on {{ final.calculated_at|date:"j M Y" }}</span>
+    <span class="total-value">{{ final.total_material_cost|money:final.currency }}</span>
+    <span class="total-meta">Saved by {{ final.calculated_by }}. Later price or mix changes don't affect these figures.</span>
+  </p>
+  {% if final.breakdown %}
+  <ul class="total-lines">
+    {% for line in final.breakdown %}
+    <li>
+      <span class="total-line-what">{{ line.quantity }} {{ line.block_label|lower }} blocks</span>
+      <span class="total-line-mix">{{ line.mix }} <span class="muted">({{ line.batches }} batch{{ line.batches|pluralize:"es" }}, {{ line.blocks_produced }} blocks made)</span></span>
+      <span class="total-line-cost">{{ line.total|decimal|money:final.currency }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+{% if final.breakdown %}
+<section class="section" aria-labelledby="final-mixes">
+  <div class="section-head"><h2 id="final-mixes">Mixes used</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Blocks</th>
+          <th scope="col">Mix</th>
+          <th scope="col">One batch</th>
+          <th scope="col" class="num">Strength</th>
+          <th scope="col" class="num">Cost per block</th>
+          <th scope="col" class="num">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in final.breakdown %}
+        <tr>
+          <td>{{ line.quantity }} {{ line.block_label|lower }}</td>
+          <td>{{ line.mix }}</td>
+          <td class="muted small">{% for item in line.ingredients %}{{ item.quantity|decimal|measure:item.unit }} {{ item.material|lower }}{% if not forloop.last %} + {% endif %}{% endfor %}</td>
+          <td class="num">{% if line.strength_mpa %}{{ line.strength_mpa|decimal|floatformat:"-2" }} MPa{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="num">{{ line.cost_per_block|decimal|money:final.currency }}</td>
+          <td class="num">{{ line.total|decimal|money:final.currency }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="section" aria-labelledby="final-materials">
+  <div class="section-head">
+    <div>
+      <h2 id="final-materials">Materials and prices used</h2>
+      <p class="muted small">The prices that applied when the project was completed.</p>
+    </div>
+  </div>
+  {% if final_materials %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th scope="col">Material</th><th scope="col" class="num">Quantity</th><th scope="col" class="num">Unit price</th><th scope="col" class="num">Subtotal</th></tr></thead>
+      <tbody>
+        {% for row in final_materials %}
+        <tr>
+          <td><span class="swatch tone-{{ row.material|material_tone }}"></span>{{ row.material.name }}</td>
+          <td class="num">{{ row.quantity_required|measure:row.unit }}</td>
+          <td class="num">{{ row.unit_price_snapshot|money:final.currency }} <span class="muted small">per {{ row.unit }}</span></td>
+          <td class="num">{{ row.subtotal|money:final.currency }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">No materials were saved with this project.</p>
+  {% endif %}
+</section>

@@ -1,7 +1,10 @@
 import math
 from decimal import Decimal
 
-from .models import MaterialPrice, MixBlockType, MixRatio
+from django.db import transaction
+from django.db.models import Max
+
+from .models import EstimateMaterial, MaterialPrice, MixBlockType, MixRatio, ProjectEstimate
 
 # "Divide the cost of one cubic metre sand/stone by 16 to get 1 wheelbarrow price."
 WHEELBARROWS_PER_M3 = Decimal('16')
@@ -136,3 +139,61 @@ def estimate_project(project):
         'blocks': blocks,
         'cost_per_block': (total / blocks).quantize(Decimal('0.01')) if complete and blocks else None,
     }
+
+
+def save_estimate(project, user, estimate=None):
+    """Store the project's current costs as a new estimate version (business rule 2).
+
+    The prices are copied into the estimate, so later price changes don't alter it.
+    Returns None if the project total isn't complete.
+    """
+    estimate = estimate or estimate_project(project)
+    if estimate['total'] is None:
+        return None
+
+    materials = {}
+    breakdown = []
+    for line in estimate['lines']:
+        option = line['selected']
+        breakdown.append({
+            'block_type': line['block'].block_type,
+            'block_label': line['block'].get_block_type_display(),
+            'quantity': line['block'].quantity,
+            'mix': option['mix'].name,
+            'strength_mpa': str(option['mix'].strength_mpa) if option['mix'].strength_mpa is not None else None,
+            'batches': option['batches'],
+            'blocks_produced': option['blocks_produced'],
+            'cost_per_block': str(option['cost_per_block']),
+            'total': str(option['total']),
+            # One batch of the mix as it was when saved.
+            'ingredients': [
+                {'material': ingredient.material.name, 'quantity': str(ingredient.quantity), 'unit': ingredient.unit}
+                for ingredient in option['mix'].ingredients.all()
+            ],
+        })
+        for item in option['lines']:
+            row = materials.setdefault(item['material'].pk, {
+                'material': item['material'], 'quantity': Decimal('0'), 'unit': item['unit'],
+                'unit_price': item['unit_price'], 'subtotal': Decimal('0'),
+            })
+            row['quantity'] += item['quantity']
+            row['subtotal'] += item['subtotal']
+
+    with transaction.atomic():
+        last = project.estimates.aggregate(v=Max('version'))['v'] or 0
+        saved = ProjectEstimate.objects.create(
+            project=project,
+            version=last + 1,
+            total_material_cost=estimate['total'],
+            currency=estimate['currency'] or 'ZAR',
+            calculated_by=user,
+            breakdown=breakdown,
+        )
+        EstimateMaterial.objects.bulk_create([
+            EstimateMaterial(
+                estimate=saved, material=row['material'], quantity_required=row['quantity'], unit=row['unit'],
+                unit_price_snapshot=row['unit_price'], subtotal=row['subtotal'],
+            )
+            for row in sorted(materials.values(), key=lambda r: r['material'].name)
+        ])
+    return saved

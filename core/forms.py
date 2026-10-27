@@ -32,10 +32,7 @@ class ProjectForm(forms.ModelForm):
 
 
 class ProjectEditForm(ProjectForm):
-    """Manager edit: same fields as creating, plus the workflow status."""
-
-    class Meta(ProjectForm.Meta):
-        fields = ['name', 'description', 'status']
+    """Manager edit: same fields as creating. Status changes on the project page instead."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

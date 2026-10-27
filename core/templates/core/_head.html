@@ -14,6 +14,12 @@
       event.preventDefault();
       return;
     }
+    // Confirm only for one value of a field, e.g. completing a project.
+    var field = form.dataset.confirmField && form.elements[form.dataset.confirmField];
+    if (field && field.value === form.dataset.confirmValue && !window.confirm(form.dataset.confirmMessage)) {
+      event.preventDefault();
+      return;
+    }
     var button = event.submitter;
     if (!button || !button.dataset.busyLabel) return;
     setTimeout(function () {

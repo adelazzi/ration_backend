@@ -1,0 +1,37 @@
+{% load ration %}
+<section class="section status-panel" aria-labelledby="project-status-title" id="project-status">
+  <div class="section-head"><h2 id="project-status-title">Project status</h2></div>
+
+  <div class="status-now">
+    <span class="status status-{{ project.status }} status-lg">{{ project.get_status_display }}</span>
+    {% if project.is_locked %}
+    <p class="muted">Completed on {{ project.completed_at|date:"j M Y" }}. This project is kept as history and can't be edited, re-priced or deleted.</p>
+    {% elif project.status == 'approved' %}
+    <p class="muted">Approved projects are visible to creators.</p>
+    {% elif project.status == 'draft' %}
+    <p class="muted">Drafts are only visible to managers and accountants.</p>
+    {% endif %}
+  </div>
+
+  {% if user.is_manager and not project.is_locked %}
+  <form method="post" action="{% url 'project_status' project.pk %}" class="status-form" novalidate
+        data-confirm-field="status" data-confirm-value="completed"
+        data-confirm-message="Complete this project? Its costs are saved as history and it can't be edited afterwards.">
+    {% csrf_token %}
+    <div class="field">
+      <label for="new-status">Change status to</label>
+      <select name="status" id="new-status" required>
+        {% for value, label in statuses %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <button type="submit" class="btn" data-busy-label="Saving…">Change status</button>
+    </div>
+  </form>
+  {% if estimate.total is None %}
+  <p class="field-help">To complete the project, choose a mix with approved prices for every block type first.</p>
+  {% else %}
+  <p class="field-help">Completing saves today's total of {{ estimate.total|money:estimate.currency }} and the prices used, then locks the project.</p>
+  {% endif %}
+  {% endif %}
+</section>

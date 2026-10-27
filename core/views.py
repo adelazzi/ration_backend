@@ -16,7 +16,8 @@ from .forms import (
 )
 from .models import BlockType, Material, MaterialPrice, MixBlockType, MixRatio, Project, ProjectBlock
 from .permissions import config_viewer_required, manager_required, price_reviewer_required
-from .services import estimate_project, latest_approved_prices, price_per_base_unit
+from .services import estimate_project, latest_approved_prices, price_per_base_unit, save_estimate
+from .templatetags.ration import money
 
 
 @login_required
@@ -127,7 +128,11 @@ def project_detail_view(request, pk):
         'material_rows': material_rows,
         'project_prices': project.material_prices.select_related('material', 'created_by', 'reviewed_by')
         .order_by('-created_at'),
+        'final': project.final_estimate,
+        'statuses': [choice for choice in Project.Status.choices if choice[0] != project.status],
     }
+    if context['final']:
+        context['final_materials'] = context['final'].materials.select_related('material')
     if request.user.is_manager:
         # Default to the currency this project is already priced in, so totals stay addable.
         currency = estimate['currency'] or next(
@@ -140,7 +145,9 @@ def project_detail_view(request, pk):
 @manager_required
 @require_POST
 def project_choose_mix_view(request, pk, block_pk):
-    block = get_object_or_404(ProjectBlock, pk=block_pk, project_id=pk)
+    block = get_object_or_404(ProjectBlock.objects.select_related('project'), pk=block_pk, project_id=pk)
+    if block.project.is_locked:
+        return _locked(request, block.project)
     block.mix = get_object_or_404(
         MixRatio, pk=request.POST.get('mix') or 0, is_active=True,
         block_type__in=[block.block_type, MixBlockType.BOTH],
@@ -154,6 +161,8 @@ def project_choose_mix_view(request, pk, block_pk):
 @require_POST
 def project_price_add_view(request, pk):
     project = get_object_or_404(Project, pk=pk)
+    if project.is_locked:
+        return _locked(request, project)
     form = MaterialPriceForm(request.POST, prefix='price')
     if form.is_valid():
         price = form.save(commit=False)
@@ -167,8 +176,45 @@ def project_price_add_view(request, pk):
 
 
 @manager_required
+@require_POST
+def project_status_view(request, pk):
+    project = get_object_or_404(Project, pk=pk)
+    if project.is_locked:
+        return _locked(request, project)
+    status = request.POST.get('status')
+    if status not in Project.Status.values or status == project.status:
+        messages.error(request, 'Choose a new status.')
+        return redirect('project_detail', pk=pk)
+
+    if status == Project.Status.COMPLETED:
+        estimate = estimate_project(project)
+        if estimate['total'] is None:
+            messages.error(
+                request,
+                'A project can only be completed once every block type has a chosen mix with approved prices.',
+            )
+            return redirect(f"{reverse('project_detail', args=[pk])}#project-status")
+        with transaction.atomic():
+            saved = save_estimate(project, request.user, estimate)
+            project.status = status
+            project.completed_at = timezone.now()
+            project.save(update_fields=['status', 'completed_at', 'updated_at'])
+        messages.success(
+            request,
+            f'Project completed. Its costs are saved as history ({money(saved.total_material_cost, saved.currency)}).',
+        )
+    else:
+        project.status = status
+        project.save(update_fields=['status', 'updated_at'])
+        messages.success(request, f'Status changed to {project.get_status_display().lower()}.')
+    return redirect('project_detail', pk=pk)
+
+
+@manager_required
 def project_edit_view(request, pk):
     project = get_object_or_404(Project, pk=pk)
+    if project.is_locked:
+        return _locked(request, project)
     form = ProjectEditForm(request.POST or None, instance=project)
     if request.method == 'POST' and form.is_valid():
         with transaction.atomic():
@@ -183,6 +229,8 @@ def project_edit_view(request, pk):
 @require_POST
 def project_delete_view(request, pk):
     project = get_object_or_404(Project, pk=pk)
+    if project.is_locked:
+        return _locked(request, project)
     try:
         project.delete()
     except ProtectedError:
@@ -345,6 +393,11 @@ def mix_delete_view(request, pk):
     mix.delete()
     messages.success(request, f'Mix "{mix.name}" deleted.')
     return redirect('config')
+
+
+def _locked(request, project):
+    messages.error(request, f'"{project.name}" is completed and kept as history, so it can\'t be changed.')
+    return redirect('project_detail', pk=project.pk)
 
 
 def _back(request):

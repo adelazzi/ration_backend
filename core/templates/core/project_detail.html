@@ -15,8 +15,19 @@
       {% if project.description %}<br>{{ project.description }}{% endif %}
     </p>
   </div>
-  {% if user.is_manager %}<a href="{% url 'project_edit' project.pk %}" class="btn btn-quiet">Edit project</a>{% endif %}
+  <div class="head-actions">
+    {% if user.is_manager and not project.is_locked %}<a href="{% url 'project_edit' project.pk %}" class="btn btn-quiet">Edit project</a>{% endif %}
+    <a href="#project-status" class="btn btn-quiet">{% if project.is_locked %}History{% else %}Status{% endif %}</a>
+  </div>
 </div>
+
+{% if project.is_locked %}
+  {% if final %}
+    {% include "core/_project_history.html" %}
+  {% else %}
+  <div class="notice notice-warning" role="status">This project is completed, but no saved costs were found for it.</div>
+  {% endif %}
+{% else %}
 
 {# ---------- Project total ---------- #}
 <section class="project-total" aria-labelledby="project-total">
@@ -260,4 +271,7 @@
   {% endif %}
 </section>
 {% endfor %}
+{% endif %}
+
+{% include "core/_project_status.html" %}
 {% endblock %}
