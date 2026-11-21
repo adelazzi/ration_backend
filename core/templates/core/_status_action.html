@@ -4,8 +4,8 @@
   {% csrf_token %}
   <input type="hidden" name="status" value="{{ next }}">
   {% if next == 'pending' %}
-  <button type="submit" class="btn" data-busy-label="Sending…"{% if not project.mix_id %} disabled title="Choose a mixture first"{% endif %}>Send for approval</button>
-  {% if not compact %}<span class="field-help">{% if not project.mix_id %}Choose a mixture first.{% else %}An accountant approves or declines it.{% endif %}</span>{% endif %}
+  <button type="submit" class="btn" data-busy-label="Sending…"{% if send_blocker %} disabled title="{{ send_blocker }}"{% endif %}>Send for approval</button>
+  {% if send_blocker %}<span class="field-help field-blocker">{{ send_blocker }}</span>{% elif not compact %}<span class="field-help">An accountant approves or declines it.</span>{% endif %}
   {% elif next == 'draft' %}
   <button type="submit" class="btn btn-quiet" data-busy-label="Moving…">Back to draft</button>
   {% if not compact %}<span class="field-help">Withdraws the approval request so the project can be edited again.</span>{% endif %}

@@ -380,6 +380,12 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); m
 .price-edit-form { display: flex; align-items: center; gap: 8px; }
 .price-edit-form input { width: 110px; flex: none; text-align: right; padding: 6px 10px; }
 .price-edit .link-button { margin-top: 6px; }
+.price-edit.has-error input { border-color: var(--bad); }
+.save-prices {
+  display: flex; justify-content: flex-end; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-top: 12px; padding: 12px 14px; border-radius: var(--radius-lg);
+  background: var(--surface); border: 1px solid var(--line);
+}
 
 /* ---------- Project status bar (top of the project page) ---------- */
 
@@ -517,6 +523,13 @@ fieldset.field legend { padding: 0; margin-bottom: 6px; }
 .auth-form { width: 100%; max-width: 380px; }
 .auth-form h1 { font-weight: 600; font-size: 1.625rem; letter-spacing: -0.015em; margin: 0 0 6px; }
 .auth-form .lede { margin: 0 0 28px; }
+.demo-login { margin-top: 28px; }
+.demo-divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 0.8125rem; margin-bottom: 14px; }
+.demo-divider::before, .demo-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.demo-buttons { display: grid; gap: 8px; }
+.demo-button { display: grid; justify-content: stretch; justify-items: start; gap: 1px; text-align: left; padding: 10px 14px; white-space: normal; width: 100%; }
+.demo-role { font-weight: 600; }
+.demo-hint { font-size: 0.75rem; color: var(--muted); font-weight: 400; }
 .auth-switch { margin-top: 24px; font-size: 0.875rem; color: var(--muted); }
 
 /* ---------- Project total ---------- */
@@ -563,6 +576,7 @@ fieldset.field legend { padding: 0; margin-bottom: 6px; }
 .status-panel { max-width: 720px; }
 .status-now { margin: 16px 0 18px; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
 .status-now p { margin: 0; }
+.field-blocker { color: var(--warn); }
 .status-form { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .review-box {
   margin-top: 20px; padding: 18px 20px 8px;

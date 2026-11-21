@@ -49,6 +49,9 @@ if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
     CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_EXTERNAL_HOSTNAME}')
 
+# One-click demo logins on the login page (demo day only: anyone with the link can use them).
+DEMO_LOGIN = os.environ.get('DJANGO_DEMO_LOGIN', 'false').lower() in ('1', 'true', 'yes')
+
 # Sharing the local app through an ngrok tunnel (./share.sh sets DJANGO_NGROK=true).
 NGROK_DOMAINS = ['ngrok-free.app', 'ngrok-free.dev', 'ngrok.app', 'ngrok.dev', 'ngrok.io']
 if os.environ.get('DJANGO_NGROK', 'false').lower() in ('1', 'true', 'yes'):

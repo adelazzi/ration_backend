@@ -1,5 +1,8 @@
+from django.core.management import call_command
+from django.test import TestCase, override_settings
+
+from accounts.demo import DEMO_ACCOUNTS
 from accounts.models import User
-from django.test import TestCase
 from django.urls import reverse
 
 
@@ -58,3 +61,43 @@ class AdminUserCreationTests(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(username='acc').exists())
+
+
+class DemoLoginTests(TestCase):
+    def setUp(self):
+        call_command('create_demo_accounts', stdout=open('/dev/null', 'w'))
+
+    def test_command_creates_three_accounts_without_passwords(self):
+        for role, (_, _, email) in DEMO_ACCOUNTS.items():
+            user = User.objects.get(email=email)
+            self.assertEqual(user.role, role)
+            self.assertFalse(user.has_usable_password())
+        call_command('create_demo_accounts', stdout=open('/dev/null', 'w'))
+        self.assertEqual(User.objects.filter(email__endswith='@demo.ration').count(), 3)
+
+    @override_settings(DEMO_LOGIN=False)
+    def test_demo_login_off_by_default(self):
+        self.assertNotContains(self.client.get(reverse('login')), 'Or try a demo account')
+        self.assertEqual(self.client.post(reverse('demo_login'), {'role': 'manager'}).status_code, 404)
+
+    @override_settings(DEMO_LOGIN=True)
+    def test_buttons_log_in_as_each_role(self):
+        page = self.client.get(reverse('login'))
+        self.assertContains(page, 'Or try a demo account')
+        for role in ('manager', 'accountant', 'creator'):
+            self.assertContains(page, f'value="{role}"')
+            response = self.client.post(reverse('demo_login'), {'role': role})
+            self.assertRedirects(response, reverse('home'), fetch_redirect_response=False)
+            user = User.objects.get(pk=self.client.session['_auth_user_id'])
+            self.assertEqual(user.role, role)
+            self.client.logout()
+
+    @override_settings(DEMO_LOGIN=True)
+    def test_unknown_role_or_missing_accounts(self):
+        response = self.client.post(reverse('demo_login'), {'role': 'admin'}, follow=True)
+        self.assertContains(response, 'create_demo_accounts')
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    @override_settings(DEMO_LOGIN=True)
+    def test_demo_login_needs_post(self):
+        self.assertEqual(self.client.get(reverse('demo_login')).status_code, 405)

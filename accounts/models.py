@@ -37,6 +37,11 @@ class User(AbstractUser):
         return self.is_superuser or self.role == self.Role.ACCOUNTANT
 
     @property
+    def can_see_prices(self):
+        """Creators see what materials a project needs, not what they cost."""
+        return self.is_manager or self.can_review_prices
+
+    @property
     def can_view_config(self):
         return self.is_manager or self.can_review_prices
 

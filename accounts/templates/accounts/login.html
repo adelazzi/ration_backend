@@ -23,5 +23,20 @@
 
   <button type="submit" class="btn btn-wide" data-busy-label="Logging in…">Log in</button>
 </form>
+{% if demo_accounts %}
+<section class="demo-login" aria-labelledby="demo-title">
+  <div class="demo-divider"><span id="demo-title">Or try a demo account</span></div>
+  {% for message in messages %}<div class="notice notice-{{ message.tags }}" role="alert">{{ message }}</div>{% endfor %}
+  <form method="post" action="{% url 'demo_login' %}" class="demo-buttons">
+    {% csrf_token %}
+    {% for role, name in demo_accounts %}
+    <button type="submit" name="role" value="{{ role }}" class="btn btn-quiet demo-button" data-busy-label="Logging in…">
+      <span class="demo-role">{% if role == 'manager' %}Manager{% elif role == 'accountant' %}Accountant{% else %}Creator{% endif %}</span>
+      <span class="demo-hint">{% if role == 'manager' %}Creates projects and prices{% elif role == 'accountant' %}Approves prices and projects{% else %}Reads approved projects{% endif %}</span>
+    </button>
+    {% endfor %}
+  </form>
+</section>
+{% endif %}
 <p class="auth-switch">No account yet? Ask an administrator to create one for you.</p>
 {% endblock %}

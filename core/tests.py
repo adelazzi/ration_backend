@@ -383,7 +383,7 @@ class ProjectPriceTests(BaseTestCase):
                                               mix=MixRatio.objects.get(name='Batch 4 (optimum)'))
         ProjectBlock.objects.create(project=self.project, block_type='F', quantity=70)
         self.sand = Material.objects.get(name='Sand')
-        self.set_url = reverse('project_price_set', args=[self.project.pk, self.sand.pk])
+        self.set_url = reverse('project_prices_save', args=[self.project.pk])
         self.reset_url = reverse('project_price_reset', args=[self.project.pk, self.sand.pk])
 
     def test_project_has_no_total_without_mixture(self):
@@ -394,7 +394,7 @@ class ProjectPriceTests(BaseTestCase):
         self.assertContains(self.client.get(reverse('project_detail', args=[project.pk])), 'No mixture chosen yet.')
 
     def test_manager_sets_project_price_per_tonne(self):
-        response = self.client.post(self.set_url, {'price': '200'})
+        response = self.client.post(self.set_url, {f'price_{self.sand.pk}': '200'})
         self.assertRedirects(response, reverse('project_detail', args=[self.project.pk]) + '#materials',
                              fetch_redirect_response=False)
         price = MaterialPrice.objects.get(project=self.project)
@@ -403,38 +403,38 @@ class ProjectPriceTests(BaseTestCase):
         self.assertEqual(estimate_project(self.project)['total'], Decimal('505.50'))
 
     def test_project_price_does_not_change_other_projects_or_defaults(self):
-        self.client.post(self.set_url, {'price': '200'})
+        self.client.post(self.set_url, {f'price_{self.sand.pk}': '200'})
         other = Project.objects.create(name='Other', created_by=self.user, mix=self.project.mix)
         ProjectBlock.objects.create(project=other, block_type='F', quantity=70)
         self.assertEqual(estimate_project(other)['total'], Decimal('484.08'))
         self.assertEqual(latest_approved_prices()[self.sand.pk].price, Decimal('16.43'))
 
     def test_newest_project_price_wins_and_reset_restores_default(self):
-        self.client.post(self.set_url, {'price': '200'})
-        self.client.post(self.set_url, {'price': '180'})
+        self.client.post(self.set_url, {f'price_{self.sand.pk}': '200'})
+        self.client.post(self.set_url, {f'price_{self.sand.pk}': '180'})
         self.assertEqual(latest_approved_prices(self.project)[self.sand.pk].price, Decimal('180'))
         self.client.post(self.reset_url)
         self.assertFalse(MaterialPrice.objects.filter(project=self.project).exists())
         self.assertEqual(estimate_project(self.project)['total'], Decimal('484.08'))
 
     def test_invalid_project_price_is_rejected(self):
-        self.client.post(self.set_url, {'price': '-5'})
+        self.client.post(self.set_url, {f'price_{self.sand.pk}': '-5'})
         self.assertFalse(MaterialPrice.objects.filter(project=self.project).exists())
 
     def test_material_without_weight_is_priced_per_unit(self):
         Material.objects.filter(pk=self.sand.pk).update(tonnes_per_unit=None)
-        self.client.post(self.set_url, {'price': '20'})
+        self.client.post(self.set_url, {f'price_{self.sand.pk}': '20'})
         self.assertEqual(MaterialPrice.objects.get(project=self.project).unit, 'wheelbarrow')
 
     def test_only_manager_sets_project_prices(self):
         accountant = User.objects.create_user('acc', 'acc@example.com', 'S0me-strong-pass', role=User.Role.ACCOUNTANT)
         self.client.force_login(accountant)
-        self.assertEqual(self.client.post(self.set_url, {'price': '200'}).status_code, 403)
+        self.assertEqual(self.client.post(self.set_url, {f'price_{self.sand.pk}': '200'}).status_code, 403)
         self.assertEqual(self.client.post(self.reset_url).status_code, 403)
 
     def test_project_page_shows_price_editor_to_manager(self):
         response = self.client.get(reverse('project_detail', args=[self.project.pk]))
-        self.assertContains(response, 'Change price')
+        self.assertContains(response, 'Save all prices')
         self.assertContains(response, self.set_url)
 
     def test_review_ignores_offsite_next(self):
@@ -542,7 +542,7 @@ class ProjectStatusTests(BaseTestCase):
         self.assertEqual((self.project.name, self.project.mix.name), ('House', 'Batch 4 (optimum)'))
 
         sand = Material.objects.get(name='Sand')
-        self.client.post(reverse('project_price_set', args=[self.project.pk, sand.pk]), {'price': '200'})
+        self.client.post(reverse('project_prices_save', args=[self.project.pk]), {f'price_{sand.pk}': '200'})
         self.assertTrue(MaterialPrice.objects.filter(project=self.project).exists())
         self.client.post(reverse('project_price_reset', args=[self.project.pk, sand.pk]))
         self.assertFalse(MaterialPrice.objects.filter(project=self.project).exists())
@@ -552,7 +552,7 @@ class ProjectStatusTests(BaseTestCase):
         response = self.client.get(self.detail)
         self.assertNotContains(response, 'Edit project')
         self.assertNotContains(response, 'Change mixture')
-        self.assertContains(response, 'Change price')
+        self.assertContains(response, 'Save all prices')
 
     # ----- accountant decisions -----
 
@@ -573,9 +573,20 @@ class ProjectStatusTests(BaseTestCase):
         self.client.force_login(self.user)
         self.assertContains(self.client.get(self.detail), 'Use Batch 2 instead.')
 
-    def test_accountant_cannot_approve_unpriced_project(self):
+    def test_cannot_send_for_approval_without_every_price(self):
         MaterialPrice.objects.filter(material__name='Sand').delete()
         self.send_for_approval()
+        self.assertEqual(self.status(), 'draft')
+        response = self.client.get(self.detail)
+        self.assertContains(response, 'Set a price for Sand first.')
+        self.client.post(reverse('project_prices_save', args=[self.project.pk]),
+                         {f'price_{Material.objects.get(name="Sand").pk}': '164.30'})
+        self.client.post(self.url, {'status': 'pending'})
+        self.assertEqual(self.status(), 'pending')
+
+    def test_accountant_cannot_approve_if_a_price_disappeared(self):
+        self.send_for_approval()
+        MaterialPrice.objects.filter(material__name='Sand').delete()
         self.client.force_login(self.accountant)
         self.client.post(self.review_url, {'decision': 'approved'})
         self.assertEqual(self.status(), 'pending')
@@ -603,9 +614,9 @@ class ProjectStatusTests(BaseTestCase):
         self.approve()
         sand = Material.objects.get(name='Sand')
         self.assertRedirects(self.client.get(reverse('project_edit', args=[self.project.pk])), self.detail)
-        self.client.post(reverse('project_price_set', args=[self.project.pk, sand.pk]), {'price': '200'})
+        self.client.post(reverse('project_prices_save', args=[self.project.pk]), {f'price_{sand.pk}': '200'})
         self.assertFalse(MaterialPrice.objects.filter(project=self.project).exists())
-        self.assertNotContains(self.client.get(self.detail), 'Change price')
+        self.assertNotContains(self.client.get(self.detail), 'Save all prices')
         self.client.post(self.url, {'status': 'draft'})
         self.assertEqual(self.status(), 'approved')
 
@@ -772,3 +783,77 @@ class MaterialFormTests(BaseTestCase):
         response = self.client.get(reverse('material_edit', args=[cement.pk]))
         self.assertContains(response, 'Weight of one bag (kg)')
         self.assertContains(response, 'value="50"')
+
+
+class SaveAllPricesTests(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.load_cape_town_prices()
+        self.project = Project.objects.create(name='House', created_by=self.user,
+                                              mix=MixRatio.objects.get(name='Batch 4 (optimum)'))
+        ProjectBlock.objects.create(project=self.project, block_type='F', quantity=70)
+        self.url = reverse('project_prices_save', args=[self.project.pk])
+        self.ids = {m.name: m.pk for m in Material.objects.all()}
+
+    def post(self, **prices):
+        return self.client.post(self.url, {f'price_{self.ids[name]}': value for name, value in prices.items()})
+
+    def test_saves_every_changed_price_at_once(self):
+        response = self.post(**{'Sand': '200', 'Stone 13mm': '241.67', 'Cement 50kg': '1800'})
+        self.assertRedirects(response, reverse('project_detail', args=[self.project.pk]) + '#materials',
+                             fetch_redirect_response=False)
+        saved = dict(MaterialPrice.objects.filter(project=self.project).values_list('material__name', 'price'))
+        # Stone is unchanged (21.75 / 0.09 = 241.67 per tonne), so only two prices are saved.
+        self.assertEqual(saved, {'Sand': Decimal('200'), 'Cement 50kg': Decimal('1800')})
+
+    def test_invalid_price_saves_nothing_and_keeps_what_was_typed(self):
+        response = self.post(**{'Sand': '200', 'Cement 50kg': 'abc'})
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'Nothing was saved.', status_code=400)
+        self.assertContains(response, 'value="200"', status_code=400)
+        self.assertFalse(MaterialPrice.objects.filter(project=self.project).exists())
+
+    def test_nothing_changed(self):
+        response = self.post(**{'Sand': '164.30'})
+        self.assertFalse(MaterialPrice.objects.filter(project=self.project).exists())
+        self.assertEqual(response.status_code, 302)
+
+    def test_one_form_with_save_all_button(self):
+        response = self.client.get(reverse('project_detail', args=[self.project.pk]))
+        self.assertContains(response, 'id="prices-form"')
+        self.assertContains(response, 'Save all prices')
+        for pk in self.ids.values():
+            self.assertContains(response, f'name="price_{pk}"')
+
+
+class CreatorPriceVisibilityTests(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.load_cape_town_prices()
+        self.project = Project.objects.create(name='House', created_by=self.user, status=Project.Status.APPROVED,
+                                              mix=MixRatio.objects.get(name='Batch 4 (optimum)'))
+        ProjectBlock.objects.create(project=self.project, block_type='F', quantity=70)
+        self.creator = User.objects.create_user('cre', 'cre@example.com', 'S0me-strong-pass', role=User.Role.CREATOR)
+
+    def test_creator_sees_materials_without_prices(self):
+        self.client.force_login(self.creator)
+        response = self.client.get(reverse('project_detail', args=[self.project.pk]))
+        self.assertContains(response, 'Materials needed')
+        self.assertContains(response, '0.60 t')
+        self.assertNotContains(response, 'R 484.08')
+        self.assertNotContains(response, 'R 164.30')
+        self.assertNotContains(response, '/ t')
+
+    def test_creator_sees_completed_history_without_prices(self):
+        from .services import save_estimate
+        save_estimate(self.project, self.user)
+        Project.objects.filter(pk=self.project.pk).update(status=Project.Status.COMPLETED)
+        self.client.force_login(self.creator)
+        response = self.client.get(reverse('project_detail', args=[self.project.pk]))
+        self.assertContains(response, 'Materials used')
+        self.assertContains(response, '0.60 t')
+        self.assertNotContains(response, 'R 484.08')
+
+    def test_manager_still_sees_prices(self):
+        response = self.client.get(reverse('project_detail', args=[self.project.pk]))
+        self.assertContains(response, 'R 484.08')

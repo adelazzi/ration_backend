@@ -43,6 +43,12 @@
     <div class="notice notice-warning" role="status">
       No mixture chosen yet.{% if user.is_manager and project.is_editable %} <a href="{% url 'project_edit' project.pk %}#step-mix">Choose a mixture</a> to see the materials and the total.{% endif %}
     </div>
+    {% elif not user.can_see_prices %}
+    <p class="total-figure">
+      <span class="total-label">Blocks in this project</span>
+      <span class="total-value">{{ estimate.blocks }}</span>
+      <span class="total-meta">Made with {{ estimate.mix.name }}</span>
+    </p>
     {% elif estimate.total is not None %}
     <p class="total-figure">
       <span class="total-label">Materials for the whole project</span>
@@ -63,7 +69,7 @@
       <li>
         <span class="total-line-what">{{ line.quantity }} {% if line.block_type == 'F' %}full{% else %}half{% endif %} blocks</span>
         <span class="total-line-mix">{{ line.batches }} batch{{ line.batches|pluralize:"es" }}, {{ line.blocks_produced }} blocks made</span>
-        <span class="total-line-cost">{% if line.total is not None %}{{ line.total|money:estimate.currency }}{% else %}<span class="muted">—</span>{% endif %}</span>
+        {% if user.can_see_prices %}<span class="total-line-cost">{% if line.total is not None %}{{ line.total|money:estimate.currency }}{% else %}<span class="muted">—</span>{% endif %}</span>{% endif %}
       </li>
       {% endfor %}
     </ul>
@@ -99,21 +105,29 @@
   <section class="section editable-section" aria-labelledby="materials-title" id="materials">
     <div class="section-head">
       <div>
-        <h2 id="materials-title">Materials and prices</h2>
+        <h2 id="materials-title">{% if user.can_see_prices %}Materials and prices{% else %}Materials needed{% endif %}</h2>
         <p class="muted small">
           {% if can_edit_prices %}Change a price here and it applies to this project only. The accountant checks it when approving the project.
-          {% else %}Default prices apply unless this project has its own.{% endif %}
+          {% elif user.can_see_prices %}Default prices apply unless this project has its own.
+          {% else %}What the whole project needs of each material.{% endif %}
         </p>
       </div>
     </div>
+    {% if can_edit_prices %}
+    <form method="post" action="{% url 'project_prices_save' project.pk %}" id="prices-form" novalidate>
+      {% csrf_token %}
+      {% if price_errors %}<div class="notice notice-error" role="alert">Nothing was saved. Fix the highlighted price{{ price_errors|pluralize }} and save again.</div>{% endif %}
+    {% endif %}
     <div class="table-wrap">
       <table class="table materials-table">
         <thead>
           <tr>
             <th scope="col">Material</th>
             <th scope="col" class="num">Needed</th>
+            {% if user.can_see_prices %}
             <th scope="col" class="num">Price</th>
             <th scope="col" class="num">Subtotal</th>
+            {% endif %}
             {% if can_edit_prices %}<th scope="col">Change price</th>{% endif %}
           </tr>
         </thead>
@@ -125,6 +139,7 @@
               {% if row.tonnes is not None %}<strong>{{ row.tonnes|tonnes }}</strong><div class="muted small">{{ row.quantity|measure:row.unit }}</div>
               {% else %}<strong>{{ row.quantity|measure:row.unit }}</strong>{% endif %}
             </td>
+            {% if user.can_see_prices %}
             <td class="num">
               {% if row.unit_price is not None %}
                 {% if row.price_per_tonne is not None %}{{ row.price_per_tonne|money:row.currency }} <span class="muted small">/ t</span>
@@ -133,29 +148,25 @@
               {% else %}<span class="status status-pending">No price</span>{% endif %}
             </td>
             <td class="num">{% if row.subtotal is not None %}<strong>{{ row.subtotal|money:row.currency }}</strong>{% else %}<span class="muted">—</span>{% endif %}</td>
+            {% endif %}
             {% if can_edit_prices %}
-            <td class="price-edit">
-              <form method="post" action="{% url 'project_price_set' project.pk row.material.pk %}" class="price-edit-form">
-                {% csrf_token %}
+            <td class="price-edit{% if row.error %} has-error{% endif %}">
+              <div class="price-edit-form">
                 <label class="visually-hidden" for="price-{{ row.material.pk }}">New price for {{ row.material.name }} per {% if row.material.tonnes_per_unit %}tonne{% else %}{{ row.unit }}{% endif %}</label>
-                <input type="number" step="0.01" min="0.01" inputmode="decimal" name="price" id="price-{{ row.material.pk }}"
-                       value="{% if row.price_per_tonne is not None %}{{ row.price_per_tonne }}{% elif row.unit_price is not None %}{{ row.unit_price }}{% endif %}"
-                       placeholder="0.00" required>
+                <input type="number" step="0.01" min="0.01" inputmode="decimal" name="price_{{ row.material.pk }}" id="price-{{ row.material.pk }}"
+                       value="{{ row.input_value }}" placeholder="0.00"{% if row.error %} aria-invalid="true"{% endif %}>
                 <span class="muted small">/ {% if row.material.tonnes_per_unit %}t{% else %}{{ row.unit }}{% endif %}</span>
-                <button type="submit" class="btn btn-small" data-busy-label="Saving…">Save</button>
-              </form>
+              </div>
+              {% if row.error %}<span class="field-error">{{ row.error }}</span>{% endif %}
               {% if row.project_price %}
-              <form method="post" action="{% url 'project_price_reset' project.pk row.material.pk %}">
-                {% csrf_token %}
-                <button type="submit" class="link-button">Use default price</button>
-              </form>
+              <button type="submit" class="link-button" formaction="{% url 'project_price_reset' project.pk row.material.pk %}" formnovalidate>Use default price</button>
               {% endif %}
             </td>
             {% endif %}
           </tr>
           {% endfor %}
         </tbody>
-        {% if estimate.total is not None %}
+        {% if estimate.total is not None and user.can_see_prices %}
         <tfoot>
           <tr>
             <th scope="row" colspan="3">Total</th>
@@ -166,6 +177,13 @@
         {% endif %}
       </table>
     </div>
+    {% if can_edit_prices %}
+      <div class="save-prices">
+        <span class="muted small">Change any prices above, then save them together.</span>
+        <button type="submit" class="btn" data-busy-label="Saving…">Save all prices</button>
+      </div>
+    </form>
+    {% endif %}
   </section>
   {% endif %}
 {% endif %}

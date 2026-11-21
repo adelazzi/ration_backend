@@ -133,10 +133,13 @@ def project_edit_view(request, pk):
     return _project_form_page(request, form, project)
 
 
-@login_required
-def project_detail_view(request, pk):
-    project = get_object_or_404(visible_projects(request.user).select_related('created_by', 'mix'), pk=pk)
+def _project_page(request, project, price_values=None, price_errors=None, status=200):
     estimate = estimate_project(project)
+    for row in estimate['materials']:
+        shown = row['price_per_tonne'] if row['price_per_tonne'] is not None else row['unit_price']
+        key = row['material'].pk
+        row['input_value'] = (price_values or {}).get(key, '' if shown is None else shown)
+        row['error'] = (price_errors or {}).get(key)
     context = {
         'project': project,
         'estimate': estimate,
@@ -144,35 +147,66 @@ def project_detail_view(request, pk):
         'approvals': project.approvals.select_related('reviewed_by').order_by('-reviewed_at'),
         'status_steps': _status_steps(project),
         'can_edit_prices': request.user.is_manager and project.prices_editable,
+        'send_blocker': _send_blocker(project, estimate),
+        'price_errors': price_errors or {},
     }
     if context['final']:
         context['final_materials'] = context['final'].materials.select_related('material')
-    return render(request, 'core/project_detail.html', context)
+    return render(request, 'core/project_detail.html', context, status=status)
+
+
+@login_required
+def project_detail_view(request, pk):
+    project = get_object_or_404(visible_projects(request.user).select_related('created_by', 'mix'), pk=pk)
+    return _project_page(request, project)
 
 
 @manager_required
 @require_POST
-def project_price_set_view(request, pk, material_pk):
-    """Set this project's price for one material. The accountant checks it when approving the project."""
-    project = get_object_or_404(Project, pk=pk)
-    material = get_object_or_404(Material, pk=material_pk)
-    back = f"{reverse('project_detail', args=[pk])}#materials"
+def project_prices_save_view(request, pk):
+    """Save every changed material price on the project page in one go.
+
+    Prices are per tonne when the material's weight is known, else per unit. They
+    apply to this project only; the accountant checks them when approving it.
+    """
+    project = get_object_or_404(Project.objects.select_related('created_by', 'mix'), pk=pk)
     if not project.prices_editable:
         return _not_editable(request, project)
-    form = ProjectPriceForm(material, request.POST)
-    if not form.is_valid():
-        messages.error(request, f'{material.name}: {_first_error(form)}')
-        return redirect(back)
+    estimate = estimate_project(project)
 
-    current = latest_approved_prices(project).get(material.pk)
-    MaterialPrice.objects.create(
-        material=material, project=project, price=form.cleaned_data['price'], unit=form.unit(),
-        currency=current.currency.upper() if current else 'ZAR',
-        status=MaterialPrice.Status.APPROVED, created_by=request.user,
+    values, errors, changes = {}, {}, []
+    for row in estimate['materials']:
+        material = row['material']
+        raw = request.POST.get(f'price_{material.pk}', '').strip().replace(',', '.')
+        values[material.pk] = raw
+        if not raw:
+            continue
+        form = ProjectPriceForm(material, {'price': raw})
+        if not form.is_valid():
+            errors[material.pk] = 'Enter a price above 0, with at most 2 decimals.'
+            continue
+        current = row['price_per_tonne'] if form.per_tonne else row['unit_price']
+        if current is None or form.cleaned_data['price'] != current:
+            changes.append((material, form))
+
+    if errors:
+        return _project_page(request, project, values, errors, status=400)
+    if not changes:
+        messages.success(request, 'No prices changed.')
+        return redirect(f"{reverse('project_detail', args=[pk])}#materials")
+
+    currency = estimate['currency'] or next(
+        (row['currency'] for row in estimate['materials'] if row['currency']), 'ZAR'
     )
-    per = 'tonne' if form.per_tonne else material.base_unit
-    messages.success(request, f'{material.name} price for this project set to {form.cleaned_data["price"]} per {per}.')
-    return redirect(back)
+    with transaction.atomic():
+        for material, form in changes:
+            MaterialPrice.objects.create(
+                material=material, project=project, price=form.cleaned_data['price'], unit=form.unit(),
+                currency=currency, status=MaterialPrice.Status.APPROVED, created_by=request.user,
+            )
+    names = ', '.join(material.name for material, _ in changes)
+    messages.success(request, f'Saved {"the price" if len(changes) == 1 else "prices"} for {names}.')
+    return redirect(f"{reverse('project_detail', args=[pk])}#materials")
 
 
 @manager_required
@@ -203,6 +237,13 @@ def project_status_view(request, pk):
         if project.mix_id is None:
             messages.error(request, 'Choose a mixture before sending the project for approval.')
             return redirect(back)
+        estimate = estimate_project(project)
+        if estimate['missing']:
+            messages.error(request, f'Set a price for {", ".join(estimate["missing"])} before sending the project for approval.')
+            return redirect(f"{reverse('project_detail', args=[pk])}#materials")
+        if estimate['total'] is None:
+            messages.error(request, 'Give every material a price in the same currency before sending the project for approval.')
+            return redirect(f"{reverse('project_detail', args=[pk])}#materials")
         project.status = status
         project.save(update_fields=['status', 'updated_at'])
         messages.success(request, 'Project sent for approval. Only its material prices can change while it waits.')
@@ -487,6 +528,19 @@ def mix_delete_view(request, pk):
         return redirect('mix_edit', pk=pk)
     messages.success(request, f'Mix "{mix.name}" deleted.')
     return redirect('mixes')
+
+
+def _send_blocker(project, estimate):
+    """Why a draft can't be sent for approval yet, or '' when it can."""
+    if project.status != Project.Status.DRAFT:
+        return ''
+    if not project.mix_id:
+        return 'Choose a mixture first.'
+    if estimate['missing']:
+        return f'Set a price for {", ".join(estimate["missing"])} first.'
+    if estimate['total'] is None:
+        return 'Give every material a price in the same currency first.'
+    return ''
 
 
 def _status_steps(project):

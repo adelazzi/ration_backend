@@ -10,6 +10,7 @@ Built with Django 6.1 and server-rendered templates. It runs on SQLite locally a
 - [Requirements](#requirements)
 - [Setup](#setup)
 - [Running the app](#running-the-app)
+- [Demo accounts](#demo-accounts)
 - [Sharing it with ngrok](#sharing-it-with-ngrok)
 - [Configuration](#configuration)
 - [Project structure](#project-structure)
@@ -26,7 +27,7 @@ Built with Django 6.1 and server-rendered templates. It runs on SQLite locally a
 |---|---|
 | Manager | Create, edit and delete projects (while they're drafts), choose the project's mixture, set the project's material prices (drafts and pending projects), add mixes, materials and default prices, move projects through their statuses. |
 | Accountant | Approve or decline material prices (optionally replacing a wrong price), approve or decline projects that are waiting for approval. |
-| Creator | Read approved and completed projects only. |
+| Creator | Read approved and completed projects only: the mixture and the materials needed, without prices. |
 | Superuser | Everything, plus the Django admin at `/admin/`. |
 
 There is no public sign-up. Accounts are created by an administrator in `/admin/` → **Users** → **Add user** (username, email, full name, role, password). People log in with their **email** and password.
@@ -41,13 +42,14 @@ Draft ──Send for approval──▶ Pending ──Approve (accountant)──�
 
 - **Draft**: everything can be edited.
 - **Pending**: only the project's material prices can change. The manager moves it back to draft to edit anything else.
+- A project can only be sent for approval once every material in its mixture has a price.
 - **Approved**: nothing can be edited. Visible to creators.
 - **Completed**: the total, the mixture and the prices are saved as a snapshot and the project is locked for good.
 
 **Prices**
 
 - **Default prices** apply to every project. They're added on the **Materials** page and wait for an accountant's approval before they're used.
-- **Project prices** are set by the manager on the project page and apply to that project only. They're used straight away; the accountant checks them when approving the project and can decline it with a comment such as "the sand price is too high".
+- **Project prices** are set by the manager on the project page (type any prices, then **Save all prices**) and apply to that project only. They're used straight away; the accountant checks them when approving the project and can decline it with a comment such as "the sand price is too high".
 - Quantities and prices are shown **per tonne**, with wheelbarrows and bags as a smaller second line for the people mixing on site. Each material has a weight per unit (starting values: sand 0.100 t and stone 0.090 t per wheelbarrow, cement 0.050 t per bag), editable on its material page.
 - Default prices can be entered per tonne, per unit (wheelbarrow, bag) or per cubic metre for sand and stone (1 m³ = 16 wheelbarrows).
 
@@ -112,6 +114,16 @@ First steps after logging in as the superuser:
 3. Click **Send for approval**. As an accountant, open the project and click **Approve**.
 4. As a manager, click **Mark completed** to save the project as history.
 
+## Demo accounts
+
+For a demo, the login page can show three buttons that log in as a demo manager, accountant or creator with one click, with no email or password.
+
+```bash
+python manage.py create_demo_accounts
+```
+
+Then add `DJANGO_DEMO_LOGIN=true` to `.env` and restart the server (or `./share.sh`). The accounts are `manager@demo.ration`, `accountant@demo.ration` and `creator@demo.ration`; they have no password, so the buttons are the only way in. Anyone who can open the login page can use the buttons, so remove the line from `.env` after the demo.
+
 ## Sharing it with ngrok
 
 [ngrok](https://ngrok.com) gives your computer a public HTTPS link, so someone else (a professor, a client) can use the app running on your machine with your local data. The link works only while you keep it running.
@@ -160,6 +172,7 @@ Settings are read from environment variables, or from a `.env` file in the proje
 | `DJANGO_SECURE_SSL_REDIRECT` | `true` | Redirect HTTP to HTTPS when debug is off. Set to `false` only for tests. |
 | `DJANGO_HSTS_SECONDS` | `3600` | HSTS duration when debug is off. |
 | `DJANGO_EMAIL_BACKEND` | console (debug) / SMTP | The app doesn't send email yet. |
+| `DJANGO_DEMO_LOGIN` | `false` | Shows the one-click demo account buttons on the login page. |
 | `DJANGO_NGROK` | `false` | Allows `*.ngrok-free.app` and other ngrok addresses. `share.sh` turns it on. |
 | `NGROK_DOMAIN` | unset | Your fixed ngrok domain, used by `share.sh`. |
 | `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD` | unset | Used once by `build.sh` on Render to create the first admin. Remove them after the first deploy. |
