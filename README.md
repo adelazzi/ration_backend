@@ -4,8 +4,16 @@ Ration is a web app for concrete block yards. A manager enters how many full and
 
 Built with Django 6.1 and server-rendered templates. It runs on SQLite locally and on Postgres in production (Render).
 
+## Product documentation
+
+The [requirements documentation](docs/README.md) describes the product vision and scope,
+stakeholders and personas, use cases, user stories, and software requirements. It is based on
+the current implementation and the latest customer meeting notes. Outstanding requests and
+questions are distinguished from implemented behaviour.
+
 ## Contents
 
+- [Product documentation](#product-documentation)
 - [Features](#features)
 - [Requirements](#requirements)
 - [Setup](#setup)
